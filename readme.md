@@ -13,7 +13,7 @@ Blind_log - это приложение для ведения журнала р�
 
 1. Клонируйте репозиторий:
     ```sh
-    git clone https://github.com/yourusername/blind_log.git
+    git clone https://github.com/r1oaz/Blind_Log.git
     cd blind_log
     ```
 
