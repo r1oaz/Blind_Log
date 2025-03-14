@@ -6,7 +6,7 @@ from qso_manager import QSOManager
 from exporter import Exporter
 from settings import SettingsManager
 
-class My_Log(wx.Frame):
+class Blind_log(wx.Frame):
     def __init__(self, *args, **kwds):
         kwds["style"] = kwds.get("style", 0) | wx.DEFAULT_FRAME_STYLE | wx.TAB_TRAVERSAL
         wx.Frame.__init__(self, *args, **kwds)
@@ -213,4 +213,4 @@ class My_Log(wx.Frame):
 
     def on_help(self, event):
         # Открытие файла help.html в браузере по умолчанию
-        webbrowser.open("help.html")
+        webbrowser.open("help.htm")

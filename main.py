@@ -1,9 +1,9 @@
 import wx
-from gui import My_Log
+from gui import Blind_log
 
 class MyApp(wx.App):
     def OnInit(self):
-        self.frame = My_Log(None)
+        self.frame = Blind_log(None)
         self.frame.Show()
         return True
 
