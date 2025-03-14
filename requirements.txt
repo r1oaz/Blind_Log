@@ -1,3 +1,8 @@
+<<<<<<< HEAD
 wxPython
 pytz
+=======
+wxPython
+pytz
+>>>>>>> 4d6728a1fd900293dcc7956277376e04f4acbc85
 tzlocal
