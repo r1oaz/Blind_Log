@@ -12,7 +12,7 @@ class Blind_log(wx.Frame):
         wx.Frame.__init__(self, *args, **kwds)
         
         self.SetTitle("Blind_Log")
-        self.qso_manager = QSOManager()
+        self.qso_manager = QSOManager(parent=self)  # Передаем self как родителя
         self.settings_manager = SettingsManager()
         self.exporter = Exporter(self.qso_manager, self.settings_manager)
         

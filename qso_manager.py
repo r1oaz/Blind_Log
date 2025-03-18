@@ -4,7 +4,8 @@ import pytz
 from tzlocal import get_localzone
 
 class QSOManager:
-    def __init__(self):
+    def __init__(self, parent=None):
+        self.parent = parent
         self.qso_list = []
         self.editing_index = None  # Индекс редактируемой записи
 
@@ -29,6 +30,7 @@ class QSOManager:
         
         if missing:
             msg = "Заполните обязательные поля:\n- " + "\n- ".join(missing)
+            print(msg)  # Отладочное сообщение
             self._show_error(msg)
             if first_missing_ctrl:
                 if isinstance(first_missing_ctrl, wx.Choice):
@@ -128,7 +130,7 @@ class QSOManager:
             ctrl.SetValue("")
 
     def _show_error(self, message):
-        dlg = wx.MessageDialog(self, message, "Ошибка ввода", wx.OK|wx.ICON_ERROR)
+        dlg = wx.MessageDialog(self.parent, message, "Ошибка ввода", wx.OK|wx.ICON_ERROR)
         dlg.ShowModal()
         dlg.Destroy()
 

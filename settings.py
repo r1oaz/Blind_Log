@@ -27,7 +27,7 @@ class SettingsManager:
             with open(self.config_file, 'r', encoding='cp1251') as configfile:
                 self.config.read_file(configfile)
         self.settings = {
-            'call': self.config.get('Operator', 'Call', fallback=self.default_settings['call'])
+            'call': self.config.get('Operator', 'call', fallback=self.default_settings['call'])
         }
 
     def create_default_settings(self):

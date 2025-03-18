@@ -4,6 +4,7 @@ Main module for the Blind_log application.
 
 import wx
 from gui import Blind_log
+from qso_manager import QSOManager
 
 class MyApp(wx.App):
     """
@@ -15,6 +16,7 @@ class MyApp(wx.App):
         """
         try:
             self.frame = Blind_log(None)
+            self.qso_manager = QSOManager(parent=self.frame)  # Передаем self.frame как родителя
             self.frame.Show()
             return True
         except Exception as e:
