@@ -7,13 +7,13 @@ from exporter import Exporter
 from settings import SettingsManager
 
 class Blind_log(wx.Frame):
-    def __init__(self, *args, **kwds):
+    def __init__(self, *args, settings_manager=None, **kwds):
         kwds["style"] = kwds.get("style", 0) | wx.DEFAULT_FRAME_STYLE | wx.TAB_TRAVERSAL
         wx.Frame.__init__(self, *args, **kwds)
         
         self.SetTitle("Blind_Log")
-        self.qso_manager = QSOManager(parent=self)  # Передаем self как родителя
-        self.settings_manager = SettingsManager()
+        self.settings_manager = settings_manager  # Сохраняем экземпляр SettingsManager
+        self.qso_manager = QSOManager(parent=self, settings_manager=self.settings_manager)  # Передаем settings_manager
         self.exporter = Exporter(self.qso_manager, self.settings_manager)
         
         self._init_ui()

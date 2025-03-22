@@ -1,11 +1,12 @@
 import wx
-from datetime import datetime
-import pytz
-from tzlocal import get_localzone
+from datetime import datetime, timedelta
 
 class QSOManager:
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, settings_manager=None):
         self.parent = parent
+        if settings_manager is None:
+            raise ValueError("SettingsManager не передан в QSOManager")
+        self.settings_manager = settings_manager  # Экземпляр SettingsManager
         self.qso_list = []
         self.editing_index = None  # Индекс редактируемой записи
 
@@ -39,12 +40,11 @@ class QSOManager:
                     first_missing_ctrl.SetFocus()
             return
         
-        # Получение текущего времени в UTC
+        # Получение текущего времени с учетом часового пояса из настроек
         if self.editing_index is None:
-            local_tz = get_localzone()  # Автоматическое определение часового пояса
-            local_time = datetime.now(local_tz)
-            utc_time = local_time.astimezone(pytz.utc)
-            datetime_str = utc_time.strftime("%Y-%m-%d %H:%M")
+            timezone_offset = self._get_timezone_offset()
+            current_time = datetime.utcnow() + timedelta(hours=timezone_offset)
+            datetime_str = current_time.strftime("%Y-%m-%d %H:%M")
         else:
             datetime_str = self.qso_list[self.editing_index]['datetime']
         
@@ -136,3 +136,18 @@ class QSOManager:
 
     def _show_notification(self, message):
         wx.adv.NotificationMessage("Blind_Log", message).Show()
+
+    def _get_timezone_offset(self):
+        """
+        Получает часовой пояс из настроек и возвращает его в виде смещения в часах.
+        """
+        timezone = self.settings_manager.settings.get('timezone', 'UTC')
+        if timezone == 'UTC':
+            return 0  # Если выбран UTC, возвращаем смещение 0
+        try:
+            # Преобразуем custom_timezone в целое число
+            return int(self.settings_manager.settings.get('custom_timezone', '0'))
+        except ValueError:
+            # Если значение некорректное, показываем ошибку и возвращаем 0
+            self._show_error("Некорректное значение часового пояса. Используется UTC.")
+            return 0

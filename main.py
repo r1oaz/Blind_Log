@@ -4,7 +4,7 @@ Main module for the Blind_log application.
 
 import wx
 from gui import Blind_log
-from qso_manager import QSOManager
+from settings import SettingsManager
 
 class MyApp(wx.App):
     """
@@ -15,12 +15,12 @@ class MyApp(wx.App):
         Initialize the application.
         """
         try:
-            self.frame = Blind_log(None)
-            self.qso_manager = QSOManager(parent=self.frame)  # Передаем self.frame как родителя
+            self.settings_manager = SettingsManager()
+            self.frame = Blind_log(None, settings_manager=self.settings_manager)  # Передаем settings_manager
             self.frame.Show()
             return True
         except Exception as e:
-            print(f"An error occurred: {e}")
+            wx.MessageBox(f"Ошибка при запуске приложения: {e}", "Ошибка", wx.OK | wx.ICON_ERROR)
             return False
 
 if __name__ == "__main__":
