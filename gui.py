@@ -1,9 +1,9 @@
 import wx
 import wx.adv
 import webbrowser
-from datetime import datetime
 import os
 import sys
+from datetime import datetime
 
 from qso_manager import QSOManager
 from exporter import Exporter
@@ -182,12 +182,12 @@ class Blind_log(wx.Frame):
             ("Город", 120),
             ("QTH", 120),
             ("Диапазон", 80),
-            ("Режим", 80),  # Добавление столбца "Mode"
+            ("Режим", 80),
             ("RST-принято", 80),
             ("RST-передано", 80),
             ("Частота", 80),
             ("Комментарий", 250),
-            ("Дата/Время", 150)  # Перемещение столбца "Дата/Время" в конец
+            ("Дата/Время", 150)
         ]
         for idx, (title, width) in enumerate(columns):
             self.journal_list.InsertColumn(idx, title, width=width)
@@ -195,20 +195,20 @@ class Blind_log(wx.Frame):
     def _init_accelerator(self):
         accel_entries = [
             (wx.ACCEL_CTRL, wx.WXK_RETURN, self.add_btn.GetId()),  # Ctrl+Enter для добавления QSO
-            (wx.ACCEL_CTRL, ord('E'), self.edit_btn.GetId()),      # Ctrl+E для редактирования
-            (wx.ACCEL_CTRL, ord('S'), self.export_btn.GetId()),    # Ctrl+S для экспорта
-            (wx.ACCEL_NORMAL, wx.WXK_DELETE, self.del_btn.GetId()), # Delete для удаления
-            (wx.ACCEL_SHIFT, wx.WXK_F1, wx.ID_ABOUT),              # Shift+F1 для "О программе"
-            (wx.ACCEL_NORMAL, wx.WXK_F1, wx.ID_HELP)               # F1 для "Справка"
+            (wx.ACCEL_CTRL, ord('E'), self.edit_btn.GetId()),        # Ctrl+E для редактирования
+            (wx.ACCEL_CTRL, ord('S'), self.export_btn.GetId()),        # Ctrl+S для экспорта
+            (wx.ACCEL_NORMAL, wx.WXK_DELETE, self.del_btn.GetId()),    # Delete для удаления
+            (wx.ACCEL_SHIFT, wx.WXK_F1, wx.ID_ABOUT),                  # Shift+F1 для "О программе"
+            (wx.ACCEL_NORMAL, wx.WXK_F1, wx.ID_HELP)                   # F1 для "Справка"
         ]
         accel_tbl = wx.AcceleratorTable([wx.AcceleratorEntry(*entry) for entry in accel_entries])
         self.SetAcceleratorTable(accel_tbl)
 
     def on_page_changed(self, event):
         selected_page = self.notebook.GetSelection()
-        if selected_page == 0:  # Вкладка "Добавить QSO"
+        if selected_page == 0:
             self.text_ctrl_1.SetFocus()
-        elif selected_page == 1:  # Вкладка "Журнал"
+        elif selected_page == 1:
             self.journal_list.SetFocus()
         event.Skip()
 
@@ -218,9 +218,67 @@ class Blind_log(wx.Frame):
     def on_exit(self, event):
         self.Close()
 
+    def _get_version_info(self):
+        """
+        Читает информацию о программе из файла version.txt.
+        """
+        version_file = resource_path("version.txt")
+        version_info = {
+            "description": "Программный радиолюбительский журнал",
+            "author": "Неизвестный автор",
+            "version": "Неизвестная версия"
+        }
+
+        if os.path.exists(version_file):
+            try:
+                with open(version_file, "r", encoding="utf-8") as file:
+                    content = file.read()
+                    # Извлечение данных из структуры VSVersionInfo
+                    if "FileDescription" in content:
+                        version_info["description"] = content.split("StringStruct('FileDescription', u'")[1].split("')")[0]
+                    if "CompanyName" in content:
+                        version_info["author"] = content.split("StringStruct('CompanyName', u'")[1].split("')")[0]
+                    if "FileVersion" in content:
+                        version_info["version"] = content.split("StringStruct('FileVersion', u'")[1].split("')")[0]
+            except Exception as e:
+                wx.MessageBox(f"Ошибка чтения файла version.txt: {e}", "Ошибка", wx.OK | wx.ICON_ERROR)
+
+        return version_info
+
     def on_about(self, event):
-        # Заглушка для "О программе"
-        wx.MessageBox("О программе: Blind_Log", "О программе", wx.OK | wx.ICON_INFORMATION)
+        """
+        Обработчик для пункта меню "О программе".
+        """
+        # Чтение данных из файла version.txt
+        version_info = self._get_version_info()
+
+        # Создание диалога "О программе"
+        about_dialog = wx.Dialog(self, title="О программе", size=(400, 300))
+        about_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # Текст с информацией о программе
+        about_text = wx.StaticText(
+            about_dialog,
+            label=f"{version_info['description']}\n\n"
+                  f"Автор: {version_info['author']}\n"
+                  f"Версия: {version_info['version']}"
+        )
+        about_text.Wrap(380)
+        about_sizer.Add(about_text, 1, wx.ALL | wx.EXPAND, 10)
+
+        # Кнопка для перехода на сайт программы
+        site_button = wx.Button(about_dialog, label="Перейти на сайт программы")
+        site_button.Bind(wx.EVT_BUTTON, lambda evt: webbrowser.open("https://github.com/r1oaz/Blind_Log"))
+        about_sizer.Add(site_button, 0, wx.ALL | wx.ALIGN_CENTER, 10)
+
+        # Кнопка "Закрыть"
+        close_button = wx.Button(about_dialog, label="Закрыть")
+        close_button.Bind(wx.EVT_BUTTON, lambda evt: about_dialog.Close())
+        about_sizer.Add(close_button, 0, wx.ALL | wx.ALIGN_CENTER, 10)
+
+        about_dialog.SetSizer(about_sizer)
+        about_dialog.ShowModal()
+        about_dialog.Destroy()
 
     def on_help(self, event):
         # Открытие файла help.htm из ресурсов, упакованных в exe
