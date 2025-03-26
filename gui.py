@@ -2,9 +2,20 @@ import wx
 import wx.adv
 import webbrowser
 from datetime import datetime
+import os
+import sys
+
 from qso_manager import QSOManager
 from exporter import Exporter
 from settings import SettingsManager
+
+def resource_path(relative_path):
+    """Возвращает абсолютный путь к ресурсу, учитывая запуск из PyInstaller onefile."""
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 class Blind_log(wx.Frame):
     def __init__(self, *args, settings_manager=None, **kwds):
@@ -212,5 +223,6 @@ class Blind_log(wx.Frame):
         wx.MessageBox("О программе: Blind_Log", "О программе", wx.OK | wx.ICON_INFORMATION)
 
     def on_help(self, event):
-        # Открытие файла help.html в браузере по умолчанию
-        webbrowser.open("help.htm")
+        # Открытие файла help.htm из ресурсов, упакованных в exe
+        help_path = resource_path("help.htm")
+        webbrowser.open(help_path)
