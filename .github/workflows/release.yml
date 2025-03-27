@@ -29,28 +29,27 @@ jobs:
           pip list  # Проверяем установленные пакеты
 
       - name: Get latest GitHub release version
-        id: get_version
         run: |
-          VERSION=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name)
+          $response = curl -s https://api.github.com/repos/r1oaz/Blind_Log/releases/latest
+          $VERSION = ($response | ConvertFrom-Json).tag_name
           echo "version=$VERSION" >> $GITHUB_ENV
 
       - name: Update version in version.txt
         run: |
-          VERSION=${{ env.version }}
-          
-          # Преобразуем версию в формат (X, Y, Z, W)
-          VERSION_TUPLE=$(echo $VERSION | sed 's/^v//;s/\./, /g')
-          VERSION_TUPLE="($VERSION_TUPLE, 0)"
-          
-          # Преобразуем версию для StringStruct с точками
-          VERSION_DOT=$(echo $VERSION | sed 's/^v//;s/\././g')
-
-          echo "Updating version.txt with version: $VERSION"
-          
-          # Обновляем строки в version.txt
-          sed -i "s/filevers=(.*)/filevers=$VERSION_TUPLE, # версия программы $VERSION/" version.txt
-          sed -i "s/prodvers=(.*)/prodvers=$VERSION_TUPLE, # версия продукта $VERSION/" version.txt
-          sed -i "s/StringStruct('FileVersion', .*)/StringStruct('FileVersion', u'$VERSION_DOT')/" version.txt
+          $version = "${{ env.version }}"
+          # Обновление filevers, prodvers и FileVersion в version.txt
+          (Get-Content version.txt) | ForEach-Object {
+            if ($_ -match "filevers=\(.*\)") {
+              "filevers=($version)"
+            } elseif ($_ -match "prodvers=\(.*\)") {
+              "prodvers=($version)"
+            } elseif ($_ -match "StringStruct\('FileVersion'.*") {
+              "StringStruct('FileVersion', u'$version')"
+            } else {
+              $_
+            }
+          } | Set-Content version.txt
+          Write-Host "Обновлена версия: $version"
 
       - name: Verify required files
         run: |
@@ -81,8 +80,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v0.2.${{ github.run_number }}  # Автоматический номер версии
-          release_name: Blind Log v0.2.${{ github.run_number }}
+          tag_name: v${{ env.version }}  # Автоматический номер версии
+          release_name: Blind Log v${{ env.version }}
           draft: false
           prerelease: false
 
