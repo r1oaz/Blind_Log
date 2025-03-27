@@ -28,11 +28,29 @@ jobs:
           pip install pyinstaller
           pip list  # Проверяем установленные пакеты
 
+      - name: Get latest GitHub release version
+        id: get_version
+        run: |
+          VERSION=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name)
+          echo "version=$VERSION" >> $GITHUB_ENV
+
       - name: Update version in version.txt
         run: |
-          $version = "0.2.${{ github.run_number }}"
-          Set-Content -Path version.txt -Value $version
-          Write-Host "Обновлена версия: $version"
+          VERSION=${{ env.version }}
+          
+          # Преобразуем версию в формат (X, Y, Z, W)
+          VERSION_TUPLE=$(echo $VERSION | sed 's/^v//;s/\./, /g')
+          VERSION_TUPLE="($VERSION_TUPLE, 0)"
+          
+          # Преобразуем версию для StringStruct с точками
+          VERSION_DOT=$(echo $VERSION | sed 's/^v//;s/\././g')
+
+          echo "Updating version.txt with version: $VERSION"
+          
+          # Обновляем строки в version.txt
+          sed -i "s/filevers=(.*)/filevers=$VERSION_TUPLE, # версия программы $VERSION/" version.txt
+          sed -i "s/prodvers=(.*)/prodvers=$VERSION_TUPLE, # версия продукта $VERSION/" version.txt
+          sed -i "s/StringStruct('FileVersion', .*)/StringStruct('FileVersion', u'$VERSION_DOT')/" version.txt
 
       - name: Verify required files
         run: |
