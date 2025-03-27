@@ -28,6 +28,12 @@ jobs:
           pip install pyinstaller
           pip list  # Проверяем установленные пакеты
 
+      - name: Update version in version.txt
+        run: |
+          $version = "0.2.${{ github.run_number }}"
+          Set-Content -Path version.txt -Value $version
+          Write-Host "Обновлена версия: $version"
+
       - name: Verify required files
         run: |
           if (!(Test-Path "main.py")) { Write-Host "main.py не найден!" ; exit 1 }
