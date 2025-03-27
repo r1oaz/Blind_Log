@@ -33,7 +33,7 @@ jobs:
 
       - name: Build executable with PyInstaller
         run: |
-          pyinstaller --onefile --windowed --name Blind_log --add-data "help.htm;." "version.txt;." --version-file version.txt main.py
+          pyinstaller Blind_log.spec
 
       - name: Archive build artifact
         run: Compress-Archive -Path dist\Blind_log.exe -DestinationPath dist\Blind_log.zip

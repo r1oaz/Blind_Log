@@ -1,11 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('help.htm', '.')],
+    datas=[('help.htm', '.'), ('version.txt', '.')],  # Добавили version.txt
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
