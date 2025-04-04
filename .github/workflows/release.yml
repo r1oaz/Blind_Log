@@ -3,14 +3,14 @@ name: Build and Release
 on:
   push:
     branches:
-      - main  # Запускать workflow при пуше в main
+      - main
 
 permissions:
-  contents: write  # Даем права на запись в репозиторий
+  contents: write
 
 jobs:
   build:
-    runs-on: windows-latest  # Сборка на Windows
+    runs-on: windows-latest
 
     steps:
       - name: Checkout repository
@@ -32,6 +32,7 @@ jobs:
         run: |
           $response = curl -s https://api.github.com/repos/r1oaz/Blind_Log/releases/latest
           $VERSION = ($response | ConvertFrom-Json).tag_name
+          echo "Retrieved version: $VERSION"
           echo "version=$VERSION" >> $GITHUB_ENV
 
       - name: Update version in version.txt
