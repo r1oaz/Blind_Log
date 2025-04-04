@@ -34,38 +34,27 @@ jobs:
           $VERSION = ($response | ConvertFrom-Json).tag_name
           echo "version=$VERSION" >> $GITHUB_ENV
 
-      - name: Update version in version.txt
-        run: |
-          $version = "${{ env.version }}"
-          # Обновление filevers, prodvers и FileVersion в version.txt
-          (Get-Content version.txt) | ForEach-Object {
-            if ($_ -match "filevers=\(.*\)") {
-              "filevers=($version)"
-            } elseif ($_ -match "prodvers=\(.*\)") {
-              "prodvers=($version)"
-            } elseif ($_ -match "StringStruct\('FileVersion'.*") {
-              "StringStruct('FileVersion', u'$version')"
-            } else {
-              $_
-            }
-          } | Set-Content version.txt
-          Write-Host "Обновлена версия: $version"
-
-      - name: Verify required files
-        run: |
-          if (!(Test-Path "main.py")) { Write-Host "main.py не найден!" ; exit 1 }
-          if (!(Test-Path "version.txt")) { Write-Host "version.txt не найден!" ; exit 1 }
-          if (!(Test-Path "help.htm")) { Write-Host "help.htm не найден!" ; exit 1 }
-          if (!(Test-Path "Blind_log.spec")) { Write-Host "Blind_log.spec не найден!" ; exit 1 }
-
-      - name: Ensure version.txt is included in spec file
-        run: |
-          $specContent = Get-Content Blind_log.spec
-          if ($specContent -notmatch "version.txt") {
-            Write-Host "Добавление version.txt в Blind_log.spec..."
-            $newSpec = $specContent -replace "datas=\[", "datas=[('version.txt', '.'),"
-            Set-Content Blind_log.spec $newSpec
-          }
+- name: Update version in version.txt
+  run: |
+    $version = "${{ env.version }}"
+    # Ensure version is in the correct format
+    if ($version -match '^\d+\.\d+\.\d+$') {
+      (Get-Content version.txt) | ForEach-Object {
+        if ($_ -match "filevers=\(.*\)") {
+          "filevers=($version, $version, $version, 0)"
+        } elseif ($_ -match "prodvers=\(.*\)") {
+          "prodvers=($version, $version, $version, 0)"
+        } elseif ($_ -match "StringStruct\('FileVersion'.*") {
+          "StringStruct('FileVersion', u'$version')"
+        } else {
+          $_
+        }
+      } | Set-Content version.txt
+      Write-Host "Обновлена версия: $version"
+    } else {
+      Write-Host "Invalid version format: $version"
+      exit 1
+    }
 
       - name: Build executable with PyInstaller
         run: |
