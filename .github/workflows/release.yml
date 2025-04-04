@@ -34,27 +34,27 @@ jobs:
           $VERSION = ($response | ConvertFrom-Json).tag_name
           echo "version=$VERSION" >> $GITHUB_ENV
 
-- name: Update version in version.txt
-  run: |
-    $version = "${{ env.version }}"
-    # Ensure version is in the correct format
-    if ($version -match '^\d+\.\d+\.\d+$') {
-      (Get-Content version.txt) | ForEach-Object {
-        if ($_ -match "filevers=\(.*\)") {
-          "filevers=($version, $version, $version, 0)"
-        } elseif ($_ -match "prodvers=\(.*\)") {
-          "prodvers=($version, $version, $version, 0)"
-        } elseif ($_ -match "StringStruct\('FileVersion'.*") {
-          "StringStruct('FileVersion', u'$version')"
-        } else {
-          $_
-        }
-      } | Set-Content version.txt
-      Write-Host "Обновлена версия: $version"
-    } else {
-      Write-Host "Invalid version format: $version"
-      exit 1
-    }
+      - name: Update version in version.txt
+        run: |
+          $version = "${{ env.version }}"
+          # Ensure version is in the correct format
+          if ($version -match '^\d+\.\d+\.\d+$') {
+            (Get-Content version.txt) | ForEach-Object {
+              if ($_ -match "filevers=\(.*\)") {
+                "filevers=($version, $version, $version, 0)"
+              } elseif ($_ -match "prodvers=\(.*\)") {
+                "prodvers=($version, $version, $version, 0)"
+              } elseif ($_ -match "StringStruct\('FileVersion'.*") {
+                "StringStruct('FileVersion', u'$version')"
+              } else {
+                $_
+              }
+            } | Set-Content version.txt
+            Write-Host "Обновлена версия: $version"
+          } else {
+            Write-Host "Invalid version format: $version"
+            exit 1
+          }
 
       - name: Build executable with PyInstaller
         run: |
