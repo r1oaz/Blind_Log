@@ -16,7 +16,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Обязательно для git push и правильной работы HEAD
+          fetch-depth: 0
           persist-credentials: true
 
       - name: Set up Python
@@ -24,15 +24,18 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Set up virtual environment and install dependencies
         run: |
+          python -m venv venv
+          venv\Scripts\activate
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
-          pip list  # Проверяем установленные пакеты
+          pip list
 
       - name: Update version in version.txt
         run: |
+          venv\Scripts\activate
           python update_version.py
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -42,6 +45,7 @@ jobs:
 
       - name: Build executable with PyInstaller
         run: |
+          venv\Scripts\activate
           pyinstaller Blind_log.spec
           if (!(Test-Path -Path dist\Blind_log.exe)) { throw "Build failed: Blind_log.exe not found" }
 
