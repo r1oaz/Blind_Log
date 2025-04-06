@@ -4,7 +4,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('help.htm', '.'), ('version.txt', '.')],  # Добавили version.txt
+    datas=[('help.htm', '.'), ('version.txt', '.')],  # version.txt можно оставить как данные
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -13,6 +13,7 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -34,5 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version='version.txt',
+    version=eval(open('version.txt', encoding='utf-8').read()),  # <-- исправлено
 )
