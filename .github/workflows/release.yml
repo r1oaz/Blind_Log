@@ -29,19 +29,13 @@ jobs:
           pip list  # Проверяем установленные пакеты
 
       - name: Update version in version.txt
-        id: update_version
-        shell: pwsh
         run: |
-          $VERSION = "1.0.$(Get-Date -UFormat %Y%m%d%H%M%S)"
-          echo "VERSION=$VERSION" >> $env:GITHUB_ENV
-          (Get-Content version.txt) -replace 'Version: .*', "Version: $VERSION" | Set-Content version.txt
+          python update_version.py
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add version.txt
-          git commit -m "Update version to $VERSION"
+          git commit -m "Update version in version.txt"
           git push
-        # Предотвращение зацикливания
-        if: "!contains(github.event.head_commit.message, 'Update version to')"
 
       - name: Build executable with PyInstaller
         run: |
@@ -62,8 +56,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ env.VERSION }}
-          release_name: Blind Log v${{ env.VERSION }}
+          tag_name: v${{ github.run_number }}
+          release_name: Blind Log v${{ github.run_number }}
           draft: false
           prerelease: false
 
@@ -75,4 +69,5 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: dist\Blind_log.zip
           asset_name: Blind_log.zip
+          
           asset_content_type: application/zip

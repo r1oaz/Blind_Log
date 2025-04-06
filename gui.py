@@ -1,3 +1,4 @@
+import re
 import wx
 import wx.adv
 import webbrowser
@@ -232,14 +233,19 @@ class Blind_log(wx.Frame):
         if os.path.exists(version_file):
             try:
                 with open(version_file, "r", encoding="utf-8") as file:
-                    for line in file:
-                        line = line.strip()
-                        if line.startswith("Product:"):
-                            version_info["description"] = line.split("Product:", 1)[1].strip()
-                        elif line.startswith("Author:"):
-                            version_info["author"] = line.split("Author:", 1)[1].strip()
-                        elif line.startswith("Version:"):
-                            version_info["version"] = line.split("Version:", 1)[1].strip()
+                    content = file.read()
+                    # Извлекаем ProductName
+                    product_name_match = re.search(r"StringStruct\('ProductName', '(.+?)'\)", content)
+                    if product_name_match:
+                        version_info["description"] = product_name_match.group(1)
+                    # Извлекаем FileVersion
+                    file_version_match = re.search(r"StringStruct\('FileVersion', '(.+?)'\)", content)
+                    if file_version_match:
+                        version_info["version"] = file_version_match.group(1)
+                    # Извлекаем CompanyName (если нужно для автора)
+                    author_match = re.search(r"StringStruct\('CompanyName', '(.+?)'\)", content)
+                    if author_match:
+                        version_info["author"] = author_match.group(1)
             except Exception as e:
                 wx.MessageBox(f"Ошибка чтения файла version.txt: {e}", "Ошибка", wx.OK | wx.ICON_ERROR)
 
