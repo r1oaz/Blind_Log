@@ -1,0 +1,7 @@
+# Product Information
+Product: Blind Log
+Version: 1.0.20250406123045
+Author: R1OAZ
+Description: доступный журнал для незрячих операторов
+
+# Note: The "Version" field is used by PyInstaller.

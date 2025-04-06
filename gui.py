@@ -222,7 +222,7 @@ class Blind_log(wx.Frame):
         """
         Читает информацию о программе из файла version.txt.
         """
-        version_file = resource_path("version.txt")
+        version_file = resource_path("version.txt")  # Используем resource_path для правильного пути
         version_info = {
             "description": "Программный радиолюбительский журнал",
             "author": "Неизвестный автор",
@@ -232,14 +232,14 @@ class Blind_log(wx.Frame):
         if os.path.exists(version_file):
             try:
                 with open(version_file, "r", encoding="utf-8") as file:
-                    content = file.read()
-                    # Извлечение данных из структуры VSVersionInfo
-                    if "FileDescription" in content:
-                        version_info["description"] = content.split("StringStruct('FileDescription', u'")[1].split("')")[0]
-                    if "CompanyName" in content:
-                        version_info["author"] = content.split("StringStruct('CompanyName', u'")[1].split("')")[0]
-                    if "FileVersion" in content:
-                        version_info["version"] = content.split("StringStruct('FileVersion', u'")[1].split("')")[0]
+                    for line in file:
+                        line = line.strip()
+                        if line.startswith("Product:"):
+                            version_info["description"] = line.split("Product:", 1)[1].strip()
+                        elif line.startswith("Author:"):
+                            version_info["author"] = line.split("Author:", 1)[1].strip()
+                        elif line.startswith("Version:"):
+                            version_info["version"] = line.split("Version:", 1)[1].strip()
             except Exception as e:
                 wx.MessageBox(f"Ошибка чтения файла version.txt: {e}", "Ошибка", wx.OK | wx.ICON_ERROR)
 
