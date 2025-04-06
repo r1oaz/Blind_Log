@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 20250406193530, 0),
-    prodvers=(1, 0, 20250406193530, 0),
+    filevers=(1, 0, 20250406202207, 0),
+    prodvers=(1, 0, 20250406202207, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -17,12 +17,12 @@ VSVersionInfo(
           [
             StringStruct('CompanyName', 'Your Company Name'),
             StringStruct('FileDescription', 'Description of your file'),
-            StringStruct('FileVersion', '1.0.20250406193530'),
+            StringStruct('FileVersion', '1.0.20250406202207'),
             StringStruct('InternalName', 'Internal name of the file'),
             StringStruct('LegalCopyright', 'Copyright (C) 2025'),
             StringStruct('OriginalFilename', 'OriginalFilename.exe'),
             StringStruct('ProductName', 'Product Name'),
-            StringStruct('ProductVersion', '1.0.20250406193530')
+            StringStruct('ProductVersion', '1.0.20250406202207')
           ]
         )
       ]
