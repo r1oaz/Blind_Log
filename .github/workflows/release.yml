@@ -13,51 +13,68 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout repository
+      - name: 🧾 Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: true
 
-      - name: Set up Python
+      - name: 🐍 Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.12"
 
-      - name: Set up virtual environment and install dependencies
+      - name: 📦 Create venv and install dependencies
         run: |
           python -m venv venv
-          venv\Scripts\activate
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
-          pip list
+          venv\Scripts\python.exe -m pip install --upgrade pip
+          venv\Scripts\python.exe -m pip install -r requirements.txt
+          venv\Scripts\python.exe -m pip install pyinstaller
+        shell: pwsh
 
-      - name: Update version in version.txt
+      - name: 🕒 Update version.txt
         run: |
-          venv\Scripts\activate
-          python update_version.py
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add version.txt
-          git diff --cached --quiet || git commit -m "Update version in version.txt"
-          git push
-
-      - name: Build executable with PyInstaller
-        run: |
-          venv\Scripts\activate
-          pyinstaller Blind_log.spec
-          if (!(Test-Path -Path dist\Blind_log.exe)) { throw "Build failed: Blind_log.exe not found" }
-
-      - name: Archive build artifact
-        run: |
-          if (Test-Path -Path dist\Blind_log.exe) {
-            Compress-Archive -Path dist\Blind_log.exe -DestinationPath dist\Blind_log.zip
-          } else {
-            throw "Build artifact not found: dist\Blind_log.exe"
+          try {
+            venv\Scripts\python.exe update_version.py
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add version.txt
+            git diff --cached --quiet || git commit -m "Update version in version.txt"
+            git push
+          } catch {
+            Write-Error "❌ Ошибка при обновлении версии: $_"
+            exit 1
           }
+        shell: pwsh
 
-      - name: Create GitHub Release
+      - name: 🛠️ Build executable with PyInstaller
+        run: |
+          try {
+            venv\Scripts\pyinstaller.exe Blind_log.spec
+            if (!(Test-Path -Path "dist\\Blind_log\\Blind_log.exe")) {
+              Write-Error "❌ Файл не найден: dist\\Blind_log\\Blind_log.exe"
+              exit 1
+            }
+          } catch {
+            Write-Error "❌ Ошибка сборки: $_"
+            exit 1
+          }
+        shell: pwsh
+
+      - name: 📦 Archive build artifact
+        run: |
+          try {
+            Compress-Archive -Path dist\Blind_log\Blind_log.exe -DestinationPath dist\Blind_log.zip -Force
+            if (!(Test-Path dist\Blind_log.zip)) {
+              Write-Error "❌ Не удалось создать архив"
+              exit 1
+            }
+          } catch {
+            Write-Error "❌ Ошибка архивации: $_"
+            exit 1
+          }
+        shell: pwsh
+
+      - name: 🚀 Create GitHub Release
         id: create_release
         uses: actions/create-release@v1
         env:
@@ -68,7 +85,7 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: Upload Release Asset
+      - name: ⬆️ Upload Release Asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

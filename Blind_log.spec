@@ -1,5 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.win32.versioninfo import VSVersionInfo, FixedFileInfo, StringFileInfo, StringTable, StringStruct, VarFileInfo, VarStruct
+
 a = Analysis(
     ['main.py'],
     pathex=[],
@@ -35,5 +37,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version=eval(open('version.txt', encoding='utf-8').read()),  # <-- исправлено
+    version=eval(open('version.txt', encoding='utf-8').read()),  # теперь будет работать
 )
