@@ -50,8 +50,8 @@ jobs:
         run: |
           try {
             venv\Scripts\pyinstaller.exe Blind_log.spec
-            if (!(Test-Path -Path "dist\\Blind_log\\Blind_log.exe")) {
-              Write-Error "❌ Файл не найден: dist\\Blind_log\\Blind_log.exe"
+            if (!(Test-Path -Path "dist\\Blind_log.exe")) {
+              Write-Error "❌ Файл не найден: dist\\Blind_log.exe"
               exit 1
             }
           } catch {
@@ -63,7 +63,7 @@ jobs:
       - name: 📦 Archive build artifact
         run: |
           try {
-            Compress-Archive -Path dist\Blind_log\Blind_log.exe -DestinationPath dist\Blind_log.zip -Force
+            Compress-Archive -Path dist\Blind_log.exe -DestinationPath dist\Blind_log.zip -Force
             if (!(Test-Path dist\Blind_log.zip)) {
               Write-Error "❌ Не удалось создать архив"
               exit 1
