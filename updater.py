@@ -6,27 +6,39 @@ import requests
 import wx
 import threading
 import re
+import sys  # Для работы с sys._MEIPASS
 
 EXE_NAME = "Blind_log.exe"
 ZIP_URL = "https://github.com/r1oaz/Blind_Log/releases/latest/download/Blind_log.zip"
 REMOTE_VERSION_URL = "https://raw.githubusercontent.com/r1oaz/Blind_Log/main/version.txt"
-VERSION_FILE = "version.txt"
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+VERSION_FILE = resource_path("version.txt")
 
 class UpdaterFrame(wx.Frame):
     def __init__(self, callback_on_done):
         super().__init__(None, title="Проверка обновлений", size=(400, 200))
         self.panel = wx.Panel(self)
         self.callback_on_done = callback_on_done
-        self.update_cancelled = False  # Флаг для отслеживания отмены обновления
+        self.update_cancelled = False
+        self.update_successful = False
 
         self.info = wx.StaticText(self.panel, label="Проверка обновлений...")
         self.progress = wx.Gauge(self.panel, range=100, style=wx.GA_HORIZONTAL)
         self.progress.Hide()
+        self.status_text = wx.StaticText(self.panel, label="")
 
-        sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer.Add(self.info, 0, wx.ALL | wx.EXPAND, 10)
-        sizer.Add(self.progress, 0, wx.ALL | wx.EXPAND, 10)
-        self.panel.SetSizerAndFit(sizer)
+        self.sizer = wx.BoxSizer(wx.VERTICAL)
+        self.sizer.Add(self.info, 0, wx.ALL | wx.EXPAND, 10)
+        self.sizer.Add(self.progress, 0, wx.ALL | wx.EXPAND, 10)
+        self.sizer.Add(self.status_text, 0, wx.ALL | wx.EXPAND, 10)
+        self.panel.SetSizerAndFit(self.sizer)
 
         self.Center()
         self.Show()
@@ -34,7 +46,6 @@ class UpdaterFrame(wx.Frame):
         threading.Thread(target=self.check_versions, daemon=True).start()
 
     def get_local_version(self):
-        """Чтение локальной версии из version.txt"""
         if not os.path.exists(VERSION_FILE):
             wx.CallAfter(self.info.SetLabel, "Файл version.txt не найден.")
             return None
@@ -49,7 +60,6 @@ class UpdaterFrame(wx.Frame):
         return None
 
     def get_remote_version(self):
-        """Получение удалённой версии из GitHub"""
         try:
             response = requests.get(REMOTE_VERSION_URL, timeout=10)
             response.raise_for_status()
@@ -83,26 +93,27 @@ class UpdaterFrame(wx.Frame):
         dlg.Destroy()
         if result == wx.ID_YES:
             self.progress.Show()
+            self.status_text.SetLabel("Идёт обновление, пожалуйста подождите...")
             self.Layout()
             threading.Thread(target=self.download_and_install, daemon=True).start()
         else:
-            self.update_cancelled = True  # Устанавливаем флаг отмены
-            self.Destroy()  # Закрываем окно обновления
+            self.update_cancelled = True
+            self.Destroy()
 
     def download_and_install(self):
         zip_path = os.path.join(tempfile.gettempdir(), "Blind_log.zip")
         try:
             success = self.download_zip(ZIP_URL, zip_path)
             if success and self.extract_and_replace(zip_path):
-                os.remove(zip_path)  # Удаляем временный файл
-                wx.CallAfter(self.finish, "Обновление завершено.")
+                os.remove(zip_path)
+                wx.CallAfter(self.finish, "Обновление завершено. Перезапустите программу вручную.\nНе забудьте сохранить лог в ADIF файл.")
             else:
                 raise Exception("Ошибка при загрузке или установке.")
         except Exception as e:
             wx.CallAfter(self.finish, f"Ошибка при установке: {e}")
         finally:
             if os.path.exists(zip_path):
-                os.remove(zip_path)  # Удаляем временный файл в любом случае
+                os.remove(zip_path)
 
     def download_zip(self, url, dest_path):
         try:
@@ -116,7 +127,10 @@ class UpdaterFrame(wx.Frame):
                         f.write(chunk)
                         downloaded += len(chunk)
                         if total > 0:
-                            wx.CallAfter(self.progress.SetValue, int(downloaded * 100 / total))
+                            percent = int(downloaded * 100 / total)
+                            wx.CallAfter(self.progress.SetValue, percent)
+                            wx.CallAfter(self.status_text.SetLabel,
+                                         f"Загружено: {percent}% ({downloaded // 1024} KB из {total // 1024} KB)")
             return True
         except Exception as e:
             wx.CallAfter(self.info.SetLabel, f"Ошибка загрузки: {e}")
@@ -141,17 +155,25 @@ class UpdaterFrame(wx.Frame):
 
     def finish(self, msg):
         if self.update_cancelled:
-            self.Destroy()  # Если обновление отменено, просто закрываем окно
+            self.Destroy()
             return
+
         self.info.SetLabel(msg)
         self.progress.Hide()
+        self.status_text.SetLabel("")
         self.Layout()
-        wx.CallLater(1500, self.close_and_continue)
+
+        if "Обновление завершено" in msg:
+            self.update_successful = True
+            # Добавляем кнопку "Закрыть"
+            close_btn = wx.Button(self.panel, label="Закрыть")
+            close_btn.Bind(wx.EVT_BUTTON, lambda e: self.Destroy())
+            self.sizer.Add(close_btn, 0, wx.ALL | wx.ALIGN_CENTER, 10)
+            self.panel.Layout()
+        else:
+            wx.CallLater(3000, self.close_and_continue)
 
     def close_and_continue(self):
-        """
-        Закрывает окно обновления и вызывает callback, если он задан.
-        """
-        if self.callback_on_done and not self.update_cancelled:
+        if self.callback_on_done and not self.update_cancelled and not self.update_successful:
             self.callback_on_done()
-        self.Destroy()  # Уничтожаем окно
+        self.Destroy()
