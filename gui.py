@@ -129,6 +129,23 @@ class Blind_log(wx.Frame):
         main_sizer.Add(comment_label, 0, wx.TOP|wx.LEFT, 5)
         main_sizer.Add(self.comment_ctrl, 1, wx.EXPAND|wx.ALL, 5)
 
+        # Поля для даты и времени
+        date_time_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        date_label = wx.StaticText(panel, label="Дата:")
+        self.date_ctrl = wx.adv.DatePickerCtrl(panel, style=wx.adv.DP_DROPDOWN | wx.adv.DP_SHOWCENTURY)
+        time_label = wx.StaticText(panel, label="Время:")
+        self.time_ctrl = wx.adv.TimePickerCtrl(panel)
+        date_time_sizer.Add(date_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
+        date_time_sizer.Add(self.date_ctrl, 1, wx.EXPAND | wx.RIGHT, 10)
+        date_time_sizer.Add(time_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
+        date_time_sizer.Add(self.time_ctrl, 1, wx.EXPAND)
+        main_sizer.Add(date_time_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        # Установка начальных значений для даты и времени
+        current_time = self.qso_manager._get_current_time_with_timezone()
+        self.date_ctrl.SetValue(wx.DateTime.FromDMY(current_time.day, current_time.month - 1, current_time.year))
+        self.time_ctrl.SetValue(wx.DateTime.FromHMS(current_time.hour, current_time.minute, 0))  # Убираем секунды
+
         # Кнопка добавления
         self.add_btn = wx.Button(panel, label="Добавить QSO")
         main_sizer.Add(self.add_btn, 0, wx.ALIGN_RIGHT|wx.ALL, 10)
@@ -148,6 +165,11 @@ class Blind_log(wx.Frame):
         self.qso_manager.comment_ctrl = self.comment_ctrl
         self.qso_manager.band_selector = self.band_selector
         self.qso_manager.mode_selector = self.mode_selector
+        self.qso_manager.date_ctrl = self.date_ctrl  # Привязка поля даты
+        self.qso_manager.time_ctrl = self.time_ctrl  # Привязка поля времени
+
+        # Установка значений по умолчанию для RST-принято и RST-передано
+        self.qso_manager._initialize_rst_fields()
 
     def _init_journal_ui(self, panel):
         sizer = wx.BoxSizer(wx.VERTICAL)

@@ -10,15 +10,14 @@ class QSOManager:
         self.qso_list = []
         self.editing_index = None  # Индекс редактируемой записи
 
+        # Установка значений по умолчанию для RST-принято и RST-передано
+        self.text_ctrl_7 = None  # RST-принято
+        self.text_ctrl_8 = None  # RST-передано
+
     def add_qso(self, event):
         required_fields = {
             'Позывной': (self.text_ctrl_1, self.text_ctrl_1.GetValue().strip().upper()),  # Преобразование в заглавные буквы
-            'Имя': (self.text_ctrl_2, self.text_ctrl_2.GetValue().strip().title()),  # Преобразование первых букв в заглавные
-            'Город': (self.text_ctrl_3, self.text_ctrl_3.GetValue().strip().title()),  # Преобразование первых букв в заглавные
-            'RST-принято': (self.text_ctrl_7, self.text_ctrl_7.GetValue().strip()),
-            'RST-передано': (self.text_ctrl_8, self.text_ctrl_8.GetValue().strip()),
-            'Диапазон': (self.band_selector, self.band_selector.GetStringSelection()),
-            'Режим': (self.mode_selector, self.mode_selector.GetStringSelection())  # Добавление режима
+            'Имя': (self.text_ctrl_2, self.text_ctrl_2.GetValue().strip().title())  # Преобразование первых букв в заглавные
         }
         
         missing = []
@@ -34,30 +33,27 @@ class QSOManager:
             print(msg)  # Отладочное сообщение
             self._show_error(msg)
             if first_missing_ctrl:
-                if isinstance(first_missing_ctrl, wx.Choice):
-                    first_missing_ctrl.SetFocus()
-                else:
-                    first_missing_ctrl.SetFocus()
+                first_missing_ctrl.SetFocus()
             return
         
-        # Получение текущего времени с учетом часового пояса из настроек
-        if self.editing_index is None:
-            timezone_offset = self._get_timezone_offset()
-            current_time = datetime.utcnow() + timedelta(hours=timezone_offset)
-            datetime_str = current_time.strftime("%Y-%m-%d %H:%M")
-        else:
-            datetime_str = self.qso_list[self.editing_index]['datetime']
-        
+        # Получение и обработка значения частоты
+        freq_value = self.text_ctrl_6.GetValue().strip().replace(",", ".")  # Заменяем запятую на точку
+
+        # Получение даты и времени из полей
+        date_value = self.date_ctrl.GetValue()
+        time_value = self.time_ctrl.GetValue()
+        datetime_str = f"{date_value.FormatISODate()} {time_value.Format('%H:%M')}"  # Убираем секунды
+
         qso_data = {
             'call': required_fields['Позывной'][1],
             'name': required_fields['Имя'][1],
-            'city': required_fields['Город'][1],
+            'city': self.text_ctrl_3.GetValue().strip().title(),  # Поле "Город" необязательно
             'qth': self.text_ctrl_4.GetValue().strip().upper(),  # Преобразование всех букв в заглавные
-            'band': required_fields['Диапазон'][1],
-            'mode': required_fields['Режим'][1],  # Добавление режима
-            'freq': self.text_ctrl_6.GetValue().strip(),
-            'rst_received': required_fields['RST-принято'][1],
-            'rst_sent': required_fields['RST-передано'][1],
+            'band': self.band_selector.GetStringSelection(),
+            'mode': self.mode_selector.GetStringSelection(),  # Добавление режима
+            'freq': freq_value,  # Используем обработанное значение частоты
+            'rst_received': self.text_ctrl_7.GetValue().strip(),
+            'rst_sent': self.text_ctrl_8.GetValue().strip(),
             'comment': self.comment_ctrl.GetValue().strip().capitalize(),  # Преобразование первой буквы в заглавную
             'datetime': datetime_str
         }
@@ -121,13 +117,20 @@ class QSOManager:
             self.journal_list.SetItem(idx, 10, qso['datetime'])  # Дата/Время
 
     def _clear_fields(self):
+        """
+        Очищает все поля ввода, кроме RST-принято, RST-передано и Частоты.
+        """
         controls = [
             self.text_ctrl_1, self.text_ctrl_2, self.text_ctrl_3,
-            self.text_ctrl_4, self.text_ctrl_6, self.text_ctrl_7,
-            self.text_ctrl_8, self.comment_ctrl
+            self.text_ctrl_4, self.comment_ctrl
         ]
         for ctrl in controls:
             ctrl.SetValue("")
+
+        # Устанавливаем дату и время с учетом часового пояса
+        current_time = self._get_current_time_with_timezone()
+        self.date_ctrl.SetValue(wx.DateTime.FromDMY(current_time.day, current_time.month - 1, current_time.year))
+        self.time_ctrl.SetValue(wx.DateTime.FromHMS(current_time.hour, current_time.minute, 0))  # Убираем секунды
 
     def _show_error(self, message):
         dlg = wx.MessageDialog(self.parent, message, "Ошибка ввода", wx.OK|wx.ICON_ERROR)
@@ -151,3 +154,20 @@ class QSOManager:
             # Если значение некорректное, показываем ошибку и возвращаем 0
             self._show_error("Некорректное значение часового пояса. Используется UTC.")
             return 0
+
+    def _get_current_time_with_timezone(self):
+        """
+        Возвращает текущее время с учетом настроек часового пояса.
+        """
+        timezone_offset = self._get_timezone_offset()
+        current_time = datetime.utcnow() + timedelta(hours=timezone_offset)
+        return current_time
+
+    def _initialize_rst_fields(self):
+        """
+        Устанавливает значения по умолчанию для полей RST-принято и RST-передано.
+        """
+        if self.text_ctrl_7:
+            self.text_ctrl_7.SetValue("59")
+        if self.text_ctrl_8:
+            self.text_ctrl_8.SetValue("59")
