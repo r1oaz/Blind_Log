@@ -9,6 +9,7 @@ from datetime import datetime
 from qso_manager import QSOManager
 from exporter import Exporter
 from settings import SettingsManager
+from updater import UpdaterFrame  # Импортируем класс UpdaterFrame
 
 def resource_path(relative_path):
     """Возвращает абсолютный путь к ресурсу, учитывая запуск из PyInstaller onefile."""
@@ -38,12 +39,14 @@ class Blind_log(wx.Frame):
         menubar = wx.MenuBar()
         file_menu = wx.Menu()
         file_menu.Append(wx.ID_PREFERENCES, "Настройки\tCtrl+P")
-        file_menu.Append(wx.ID_EXIT, "Выход\tCtrl+Q")
+        file_menu.Append(wx.ID_EXIT, "Выход\tCtrl+Q")  # Используем стандартный идентификатор wx.ID_EXIT
         menubar.Append(file_menu, "Файл")
         
         help_menu = wx.Menu()
         help_menu.Append(wx.ID_ABOUT, "О программе\tShift+F1")
         help_menu.Append(wx.ID_HELP, "Справка\tF1")
+        self.check_updates_id = wx.NewId()  # Создаем уникальный идентификатор для "Проверить обновления"
+        help_menu.Append(self.check_updates_id, "Проверить обновления\tCtrl+U")  # Используем уникальный идентификатор
         menubar.Append(help_menu, "Помощь")
         
         self.SetMenuBar(menubar)
@@ -59,10 +62,12 @@ class Blind_log(wx.Frame):
         self._init_journal_ui(journal_panel)
         self.notebook.AddPage(journal_panel, "Журнал")
         
+        # Привязываем обработчики к правильным идентификаторам
         self.Bind(wx.EVT_MENU, self.on_exit, id=wx.ID_EXIT)
         self.Bind(wx.EVT_MENU, self.on_settings, id=wx.ID_PREFERENCES)
         self.Bind(wx.EVT_MENU, self.on_about, id=wx.ID_ABOUT)
         self.Bind(wx.EVT_MENU, self.on_help, id=wx.ID_HELP)
+        self.Bind(wx.EVT_MENU, self.on_check_updates, id=self.check_updates_id)  # Привязываем к уникальному идентификатору
 
     def _init_add_qso_ui(self, panel):
         main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -129,6 +134,23 @@ class Blind_log(wx.Frame):
         main_sizer.Add(comment_label, 0, wx.TOP|wx.LEFT, 5)
         main_sizer.Add(self.comment_ctrl, 1, wx.EXPAND|wx.ALL, 5)
 
+        # Поля для даты и времени
+        date_time_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        date_label = wx.StaticText(panel, label="Дата:")
+        self.date_ctrl = wx.adv.DatePickerCtrl(panel, style=wx.adv.DP_DROPDOWN | wx.adv.DP_SHOWCENTURY)
+        time_label = wx.StaticText(panel, label="Время:")
+        self.time_ctrl = wx.adv.TimePickerCtrl(panel)
+        date_time_sizer.Add(date_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
+        date_time_sizer.Add(self.date_ctrl, 1, wx.EXPAND | wx.RIGHT, 10)
+        date_time_sizer.Add(time_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
+        date_time_sizer.Add(self.time_ctrl, 1, wx.EXPAND)
+        main_sizer.Add(date_time_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        # Установка начальных значений для даты и времени
+        current_time = self.qso_manager._get_current_time_with_timezone()
+        self.date_ctrl.SetValue(wx.DateTime.FromDMY(current_time.day, current_time.month - 1, current_time.year))
+        self.time_ctrl.SetValue(wx.DateTime.FromHMS(current_time.hour, current_time.minute, 0))  # Убираем секунды
+
         # Кнопка добавления
         self.add_btn = wx.Button(panel, label="Добавить QSO")
         main_sizer.Add(self.add_btn, 0, wx.ALIGN_RIGHT|wx.ALL, 10)
@@ -148,6 +170,11 @@ class Blind_log(wx.Frame):
         self.qso_manager.comment_ctrl = self.comment_ctrl
         self.qso_manager.band_selector = self.band_selector
         self.qso_manager.mode_selector = self.mode_selector
+        self.qso_manager.date_ctrl = self.date_ctrl  # Привязка поля даты
+        self.qso_manager.time_ctrl = self.time_ctrl  # Привязка поля времени
+
+        # Установка значений по умолчанию для RST-принято и RST-передано
+        self.qso_manager._initialize_rst_fields()
 
     def _init_journal_ui(self, panel):
         sizer = wx.BoxSizer(wx.VERTICAL)
@@ -207,9 +234,9 @@ class Blind_log(wx.Frame):
 
     def on_page_changed(self, event):
         selected_page = self.notebook.GetSelection()
-        if selected_page == 0:
+        if (selected_page == 0):
             self.text_ctrl_1.SetFocus()
-        elif selected_page == 1:
+        elif (selected_page == 1):
             self.journal_list.SetFocus()
         event.Skip()
 
@@ -217,7 +244,11 @@ class Blind_log(wx.Frame):
         self.settings_manager.show_settings()
 
     def on_exit(self, event):
-        self.Close()
+        """
+        Обработчик для пункта меню "Выход".
+        Завершает приложение без вызова проверки обновлений.
+        """
+        self.Close()  # Закрываем главное окно, завершая приложение
 
     def _get_version_info(self):
         """
@@ -290,3 +321,13 @@ class Blind_log(wx.Frame):
         # Открытие файла help.htm из ресурсов, упакованных в exe
         help_path = resource_path("help.htm")
         webbrowser.open(help_path)
+
+    def on_check_updates(self, event):
+        """
+        Обработчик для пункта меню "Проверить обновления".
+        """
+        def on_update_done():
+            wx.MessageBox("Проверка обновлений завершена.", "Обновления", wx.OK | wx.ICON_INFORMATION)
+
+        updater = UpdaterFrame(callback_on_done=on_update_done)
+        updater.Bind(wx.EVT_CLOSE, lambda evt: updater.Destroy())  # Убедимся, что окно обновления закрывается
