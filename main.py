@@ -1,5 +1,5 @@
 """
-Main module for the Blind_log application.
+Основной модуль для приложения Blind_log.
 """
 
 import wx
@@ -8,11 +8,11 @@ from settings import SettingsManager
 
 class MyApp(wx.App):
     """
-    Application class for Blind_log.
+    Класс приложения для Blind_log.
     """
     def OnInit(self):
         """
-        Initialize the application.
+        Инициализация приложения.
         """
         try:
             self.settings_manager = SettingsManager()

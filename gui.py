@@ -9,6 +9,7 @@ from datetime import datetime
 from qso_manager import QSOManager
 from exporter import Exporter
 from settings import SettingsManager
+from updater import UpdaterFrame  # Импортируем класс UpdaterFrame
 
 def resource_path(relative_path):
     """Возвращает абсолютный путь к ресурсу, учитывая запуск из PyInstaller onefile."""
@@ -38,12 +39,14 @@ class Blind_log(wx.Frame):
         menubar = wx.MenuBar()
         file_menu = wx.Menu()
         file_menu.Append(wx.ID_PREFERENCES, "Настройки\tCtrl+P")
-        file_menu.Append(wx.ID_EXIT, "Выход\tCtrl+Q")
+        file_menu.Append(wx.ID_EXIT, "Выход\tCtrl+Q")  # Используем стандартный идентификатор wx.ID_EXIT
         menubar.Append(file_menu, "Файл")
         
         help_menu = wx.Menu()
         help_menu.Append(wx.ID_ABOUT, "О программе\tShift+F1")
         help_menu.Append(wx.ID_HELP, "Справка\tF1")
+        self.check_updates_id = wx.NewId()  # Создаем уникальный идентификатор для "Проверить обновления"
+        help_menu.Append(self.check_updates_id, "Проверить обновления\tCtrl+U")  # Используем уникальный идентификатор
         menubar.Append(help_menu, "Помощь")
         
         self.SetMenuBar(menubar)
@@ -59,10 +62,12 @@ class Blind_log(wx.Frame):
         self._init_journal_ui(journal_panel)
         self.notebook.AddPage(journal_panel, "Журнал")
         
+        # Привязываем обработчики к правильным идентификаторам
         self.Bind(wx.EVT_MENU, self.on_exit, id=wx.ID_EXIT)
         self.Bind(wx.EVT_MENU, self.on_settings, id=wx.ID_PREFERENCES)
         self.Bind(wx.EVT_MENU, self.on_about, id=wx.ID_ABOUT)
         self.Bind(wx.EVT_MENU, self.on_help, id=wx.ID_HELP)
+        self.Bind(wx.EVT_MENU, self.on_check_updates, id=self.check_updates_id)  # Привязываем к уникальному идентификатору
 
     def _init_add_qso_ui(self, panel):
         main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -229,9 +234,9 @@ class Blind_log(wx.Frame):
 
     def on_page_changed(self, event):
         selected_page = self.notebook.GetSelection()
-        if selected_page == 0:
+        if (selected_page == 0):
             self.text_ctrl_1.SetFocus()
-        elif selected_page == 1:
+        elif (selected_page == 1):
             self.journal_list.SetFocus()
         event.Skip()
 
@@ -239,7 +244,11 @@ class Blind_log(wx.Frame):
         self.settings_manager.show_settings()
 
     def on_exit(self, event):
-        self.Close()
+        """
+        Обработчик для пункта меню "Выход".
+        Завершает приложение без вызова проверки обновлений.
+        """
+        self.Close()  # Закрываем главное окно, завершая приложение
 
     def _get_version_info(self):
         """
@@ -312,3 +321,13 @@ class Blind_log(wx.Frame):
         # Открытие файла help.htm из ресурсов, упакованных в exe
         help_path = resource_path("help.htm")
         webbrowser.open(help_path)
+
+    def on_check_updates(self, event):
+        """
+        Обработчик для пункта меню "Проверить обновления".
+        """
+        def on_update_done():
+            wx.MessageBox("Проверка обновлений завершена.", "Обновления", wx.OK | wx.ICON_INFORMATION)
+
+        updater = UpdaterFrame(callback_on_done=on_update_done)
+        updater.Bind(wx.EVT_CLOSE, lambda evt: updater.Destroy())  # Убедимся, что окно обновления закрывается
