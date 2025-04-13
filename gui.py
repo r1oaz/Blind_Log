@@ -323,11 +323,4 @@ class Blind_log(wx.Frame):
         webbrowser.open(help_path)
 
     def on_check_updates(self, event):
-        """
-        Обработчик для пункта меню "Проверить обновления".
-        """
-        def on_update_done():
-            wx.MessageBox("Проверка обновлений завершена.", "Обновления", wx.OK | wx.ICON_INFORMATION)
-
-        updater = UpdaterFrame(callback_on_done=on_update_done)
-        updater.Bind(wx.EVT_CLOSE, lambda evt: updater.Destroy())  # Убедимся, что окно обновления закрывается
+        UpdaterFrame()

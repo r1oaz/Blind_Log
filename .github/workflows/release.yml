@@ -31,17 +31,29 @@ jobs:
           venv\Scripts\python.exe -m pip install pyinstaller
         shell: pwsh
 
-      - name: 🕒 Update version.txt
+      - name: 🕒 Update version.txt and amend commit
         run: |
           try {
             venv\Scripts\python.exe update_version.py
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add version.txt
-            git diff --cached --quiet || git commit -m "Update version in version.txt"
-            git push
+            git commit --amend --no-edit
+            git push --force-with-lease
           } catch {
             Write-Error "❌ Ошибка при обновлении версии: $_"
+            exit 1
+          }
+        shell: pwsh
+
+      - name: 🔍 Extract version from version.txt
+        id: get_version
+        run: |
+          $content = Get-Content version.txt | Where-Object { $_ -match "FileVersion" }
+          if ($content -match "'([0-9]+\.[0-9]+\.[0-9]+)") {
+            echo "version=$($matches[1])" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Error "❌ Не удалось извлечь версию"
             exit 1
           }
         shell: pwsh
@@ -80,8 +92,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ github.run_number }}
-          release_name: Blind Log v${{ github.run_number }}
+          tag_name: v${{ steps.get_version.outputs.version }}
+          release_name: Blind Log v${{ steps.get_version.outputs.version }}
           draft: false
           prerelease: false
 
