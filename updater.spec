@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['D:/projects/git_rep/Blind_Log/updater.py'],
+    ['updater.py'],
     pathex=[],
     binaries=[],
     datas=[],
