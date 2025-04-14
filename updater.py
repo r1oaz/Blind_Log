@@ -1,171 +1,140 @@
 import os
-import shutil
-import tempfile
+import sys
 import zipfile
+import shutil
+import argparse
 import requests
 import wx
 import threading
-import re
-import sys
-import subprocess
+import time
+import psutil
+import logging
 
-EXE_NAME = "Blind_log.exe"
-ZIP_URL = "https://github.com/r1oaz/Blind_Log/releases/latest/download/Blind_log.zip"
-REMOTE_VERSION_URL = "https://raw.githubusercontent.com/r1oaz/Blind_Log/main/version.txt"
+# Логгирование
+log_path = os.path.join(os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__), "updater.log")
+logging.basicConfig(filename=log_path, level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
-def resource_path(relative_path):
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--url", required=True, help="URL архива обновления")
+    parser.add_argument("--pid", type=int, required=False, help="PID основной программы (необязательно)")
+    return parser.parse_args()
+
+
+def terminate_process(pid):
     try:
-        base_path = sys._MEIPASS
-    except AttributeError:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
+        p = psutil.Process(pid)
+        if p.is_running():
+            logging.info(f"Завершаем процесс PID={pid}")
+            p.terminate()
+            p.wait(timeout=5)
+    except Exception as e:
+        logging.warning(f"Не удалось завершить процесс {pid}: {e}")
 
-VERSION_FILE = resource_path("version.txt")
+
+def extract_zip(zip_path, extract_to):
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(extract_to)
+        logging.info(f"Архив распакован в {extract_to}")
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка распаковки: {e}")
+        return False
+
+
+def launch_program(path):
+    try:
+        logging.info(f"Запускаем программу: {path}")
+        os.startfile(path)
+    except Exception as e:
+        logging.error(f"Не удалось запустить {path}: {e}")
+
 
 class UpdaterFrame(wx.Frame):
-    def __init__(self, parent=None):
-        super().__init__(parent, title="Обновление", size=(400, 150))
-        self.panel = wx.Panel(self)
+    def __init__(self, url, pid=None):
+        super().__init__(None, title="Обновление", size=(400, 150))
+        self.url = url
+        self.pid = pid
+        self.zip_path = None
 
-        self.info = wx.StaticText(self.panel, label="Проверка обновлений...")
-        self.progress = wx.Gauge(self.panel, range=100)
-        self.progress.Hide()
-        self.status_text = wx.StaticText(self.panel, label="")
+        panel = wx.Panel(self)
+        vbox = wx.BoxSizer(wx.VERTICAL)
 
-        self.sizer = wx.BoxSizer(wx.VERTICAL)
-        self.sizer.Add(self.info, 0, wx.ALL | wx.EXPAND, 10)
-        self.sizer.Add(self.progress, 0, wx.ALL | wx.EXPAND, 10)
-        self.sizer.Add(self.status_text, 0, wx.ALL | wx.EXPAND, 10)
+        self.status = wx.StaticText(panel, label="Подготовка к обновлению...")
+        self.gauge = wx.Gauge(panel, range=100, style=wx.GA_HORIZONTAL)
 
-        self.panel.SetSizerAndFit(self.sizer)
-        self.Center()
+        vbox.Add(self.status, flag=wx.ALL | wx.EXPAND, border=10)
+        vbox.Add(self.gauge, flag=wx.ALL | wx.EXPAND, border=10)
+
+        panel.SetSizer(vbox)
+        self.Centre()
         self.Show()
 
-        threading.Thread(target=self.check_versions, daemon=True).start()
+        threading.Thread(target=self.run_update, daemon=True).start()
 
-    def get_local_version(self):
-        if not os.path.exists(VERSION_FILE):
-            return None
+    def run_update(self):
         try:
-            with open(VERSION_FILE, "r") as f:
-                content = f.read()
-                match = re.search(r"StringStruct\('ProductVersion', '([\d\.]+)'\)", content)
-                return match.group(1) if match else None
-        except:
-            return None
+            logging.info("Updater запущен")
+            if self.pid:
+                terminate_process(self.pid)
+            else:
+                logging.info("PID не передан, пропускаем завершение процесса")
 
-    def get_remote_version(self):
-        try:
-            response = requests.get(REMOTE_VERSION_URL, timeout=10)
-            response.raise_for_status()
-            match = re.search(r"StringStruct\('ProductVersion', '([\d\.]+)'\)", response.text)
-            return match.group(1) if match else None
-        except:
-            return None
+            filename = os.path.basename(self.url.split("?")[0])
+            self.zip_path = os.path.join(os.getcwd(), filename)
 
-    def check_versions(self):
-        local = self.get_local_version()
-        remote = self.get_remote_version()
+            if not self.download_zip():
+                return
 
-        wx.CallAfter(self.info.SetLabel, f"Текущая версия: {local or 'неизвестно'}\nДоступна версия: {remote or 'неизвестно'}")
+            self.status.SetLabel("Распаковка файлов...")
+            success = extract_zip(self.zip_path, os.getcwd())
 
-        if not local or not remote:
-            wx.CallAfter(self.finish_dialog, "Не удалось получить версии. Проверьте подключение к интернету.")
-        elif local == remote:
-            wx.CallAfter(self.finish_dialog, "У вас актуальная версия.")
-        else:
-            wx.CallAfter(self.ask_update, remote)
+            if success:
+                self.status.SetLabel("Запуск новой версии...")
+                time.sleep(1)
+                exe_path = os.path.join(os.getcwd(), "Blind_log.exe")
+                launch_program(exe_path)
+            else:
+                self.status.SetLabel("Ошибка распаковки")
+                wx.CallAfter(wx.MessageBox, "Не удалось распаковать архив обновления.", "Ошибка", wx.ICON_ERROR)
 
-    def ask_update(self, remote):
-        dlg = wx.MessageDialog(
-            self,
-            f"Доступна новая версия {remote}.\n\nЕсли у вас есть незавершённый журнал, нажмите 'Нет', сохраните его и затем повторите обновление.\n\nОбновить сейчас?",
-            "Обновление",
-            wx.YES_NO | wx.ICON_QUESTION
-        )
-        if dlg.ShowModal() == wx.ID_YES:
-            self.progress.Show()
-            self.status_text.SetLabel("Загрузка...")
-            self.Layout()
-            threading.Thread(target=self.download_archive, daemon=True).start()
-        else:
-            self.finish_dialog("Обновление отменено.")
-        dlg.Destroy()
-
-    def download_archive(self):
-        zip_path = os.path.join(tempfile.gettempdir(), "Blind_log.zip")
-        try:
-            response = requests.get(ZIP_URL, stream=True)
-            response.raise_for_status()
-            total = int(response.headers.get('content-length', 0))
-            downloaded = 0
-
-            with open(zip_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        if total:
-                            percent = int(downloaded * 100 / total)
-                            wx.CallAfter(self.progress.SetValue, percent)
-                            wx.CallAfter(self.status_text.SetLabel, f"Загружено: {percent}%")
-
-            wx.CallAfter(self.confirm_close_and_update, zip_path)
         except Exception as e:
-            wx.CallAfter(self.finish_dialog, f"Ошибка загрузки: {e}")
+            logging.exception("Ошибка в процессе обновления")
+            wx.CallAfter(wx.MessageBox, f"Обновление завершилось с ошибкой:\n{e}", "Ошибка", wx.ICON_ERROR)
+        finally:
+            time.sleep(1)
+            self.Close()
 
-    def confirm_close_and_update(self, zip_path):
-        dlg = wx.MessageDialog(
-            self,
-            "Архив обновления загружен.\n\nСейчас будет закрыта основная программа для установки новой версии.\nПродолжить?",
-            "Установка обновления",
-            wx.YES_NO | wx.ICON_WARNING
-        )
-        if dlg.ShowModal() == wx.ID_YES:
-            self.CloseMainApp()
-            threading.Thread(target=self.replace_files_and_restart, args=(zip_path,), daemon=True).start()
-        else:
-            self.finish_dialog("Установка отменена.")
-        dlg.Destroy()
-
-    def CloseMainApp(self):
-        for window in wx.GetTopLevelWindows():
-            if window is not self:
-                window.Close()
-
-    def replace_files_and_restart(self, zip_path):
+    def download_zip(self):
+        logging.info(f"Скачиваем: {self.url}")
+        self.status.SetLabel("Загрузка обновления...")
         try:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                with zipfile.ZipFile(zip_path, 'r') as z:
-                    z.extractall(tmpdir)
+            response = requests.get(self.url, stream=True, timeout=10)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            logging.error(f"Ошибка при загрузке архива: {e}")
+            wx.CallAfter(wx.MessageBox, f"Ошибка при загрузке архива:\n{e}", "Ошибка", wx.ICON_ERROR)
+            return False
 
-                for item in os.listdir(tmpdir):
-                    s = os.path.join(tmpdir, item)
-                    d = os.path.join(os.getcwd(), item)
-                    if os.path.isdir(s):
-                        shutil.copytree(s, d, dirs_exist_ok=True)
-                    else:
-                        shutil.copy2(s, d)
+        total = int(response.headers.get('content-length', 0))
+        downloaded = 0
 
-            os.remove(zip_path)
-            wx.CallAfter(self.ask_restart)
-        except Exception as e:
-            wx.CallAfter(self.finish_dialog, f"Ошибка при замене файлов:\n{e}")
+        with open(self.zip_path, 'wb') as f:
+            for data in response.iter_content(chunk_size=1024):
+                if data:
+                    f.write(data)
+                    downloaded += len(data)
+                    percent = int((downloaded / total) * 100) if total else 0
+                    wx.CallAfter(self.gauge.SetValue, percent)
+                    wx.CallAfter(self.status.SetLabel, f"Загрузка обновления... {percent}%")
+        logging.info(f"Файл загружен: {self.zip_path}")
+        return True
 
-    def ask_restart(self):
-        dlg = wx.MessageDialog(self, "Обновление успешно установлено. Запустить программу снова?", "Готово", wx.YES_NO | wx.ICON_QUESTION)
-        if dlg.ShowModal() == wx.ID_YES:
-            subprocess.Popen([EXE_NAME], cwd=os.getcwd(), shell=True)
-        dlg.Destroy()
-        self.Destroy()
-
-    def finish_dialog(self, msg):
-        dlg = wx.MessageDialog(self, msg, "Обновление", wx.OK | wx.ICON_INFORMATION)
-        dlg.ShowModal()
-        dlg.Destroy()
-        self.Destroy()
 
 if __name__ == "__main__":
+    args = parse_args()
     app = wx.App(False)
-    UpdaterFrame()
+    UpdaterFrame(args.url, args.pid)
     app.MainLoop()

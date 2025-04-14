@@ -1,3 +1,4 @@
+import subprocess
 import re
 import wx
 import wx.adv
@@ -5,11 +6,12 @@ import webbrowser
 import os
 import sys
 from datetime import datetime
+from check import check_update
 
 from qso_manager import QSOManager
 from exporter import Exporter
 from settings import SettingsManager
-from updater import UpdaterFrame  # Импортируем класс UpdaterFrame
+
 
 def resource_path(relative_path):
     """Возвращает абсолютный путь к ресурсу, учитывая запуск из PyInstaller onefile."""
@@ -323,4 +325,4 @@ class Blind_log(wx.Frame):
         webbrowser.open(help_path)
 
     def on_check_updates(self, event):
-        UpdaterFrame()
+        check_update(self)  # вызываем функцию и передаём главное окно

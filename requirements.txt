@@ -2,3 +2,4 @@ wxPython
 pytz
 tzlocal
 requests
+psutil

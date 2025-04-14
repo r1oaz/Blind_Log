@@ -58,7 +58,7 @@ jobs:
           }
         shell: pwsh
 
-      - name: 🛠️ Build executable with PyInstaller
+      - name: 🛠️ Build Blind_log.exe with PyInstaller
         run: |
           try {
             venv\Scripts\pyinstaller.exe Blind_log.spec
@@ -67,15 +67,29 @@ jobs:
               exit 1
             }
           } catch {
-            Write-Error "❌ Ошибка сборки: $_"
+            Write-Error "❌ Ошибка сборки Blind_log.exe: $_"
             exit 1
           }
         shell: pwsh
 
-      - name: 📦 Archive build artifact
+      - name: 🛠️ Build updater.exe with PyInstaller
         run: |
           try {
-            Compress-Archive -Path dist\Blind_log.exe -DestinationPath dist\Blind_log.zip -Force
+            venv\Scripts\pyinstaller.exe updater.spec
+            if (!(Test-Path -Path "dist\\updater.exe")) {
+              Write-Error "❌ Файл не найден: dist\\updater.exe"
+              exit 1
+            }
+          } catch {
+            Write-Error "❌ Ошибка сборки updater.exe: $_"
+            exit 1
+          }
+        shell: pwsh
+
+      - name: 📦 Archive build artifacts
+        run: |
+          try {
+            Compress-Archive -Path dist\Blind_log.exe,dist\updater.exe -DestinationPath dist\Blind_log.zip -Force
             if (!(Test-Path dist\Blind_log.zip)) {
               Write-Error "❌ Не удалось создать архив"
               exit 1
