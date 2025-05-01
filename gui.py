@@ -6,7 +6,7 @@ import webbrowser
 import os
 import sys
 from datetime import datetime
-from check import check_update
+from updater import check_update
 
 from qso_manager import QSOManager
 from exporter import Exporter
