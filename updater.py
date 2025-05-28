@@ -44,7 +44,7 @@ def version_tuple(v):
     """Преобразует строку версии в кортеж чисел."""
     return tuple(int(x) for x in v.strip().replace("v", "").split("."))
 
-def check_update(parent_frame):
+def check_update(parent_frame, silent_if_latest=False):
     """Проверяет наличие обновлений и запускает процесс обновления."""
     version_path = resource_path("version.txt")
     current_version = parse_version_txt(version_path)
@@ -74,7 +74,8 @@ def check_update(parent_frame):
         return
 
     if version_tuple(latest_version) <= version_tuple(current_version):
-        wx.CallAfter(wx.MessageBox, f"У вас уже установлена последняя версия: {current_version}", "Обновление", wx.ICON_INFORMATION)
+        if not silent_if_latest:
+            wx.CallAfter(wx.MessageBox, f"У вас уже установлена последняя версия: {current_version}", "Обновление", wx.ICON_INFORMATION)
         return
 
     dlg = wx.MessageDialog(
@@ -144,10 +145,10 @@ def download_and_update(download_url, parent_frame):
             return
 
         # Создаём bat-файл для обновления
-        create_update_bat(temp_dir, zip_path)
+        create_update_bat(zip_path)
 
         # Запускаем bat-файл и закрываем программу
-        bat_path = os.path.join(temp_dir, "update.bat")
+        bat_path = os.path.join(get_app_path(), "update_later.bat")
         subprocess.Popen([bat_path], shell=True)
         parent_frame.Close()
 
@@ -166,22 +167,19 @@ def extract_zip(zip_path, extract_to):
         logging.error(f"Ошибка распаковки: {e}")
         return False
 
-def create_update_bat(temp_dir, zip_path):
-    """Создаёт bat-файл для завершения программы и обновления файлов."""
-    bat_path = os.path.join(temp_dir, "update.bat")
-    app_dir = get_app_path()
-
-    with open(bat_path, "w", encoding="cp1251") as bat_file:
-        bat_file.write(f"""
-        @echo off
-        timeout /t 2 /nobreak >nul
-        taskkill /f /im Blind_log.exe >nul 2>&1
-        timeout /t 1 /nobreak >nul
-        xcopy "{temp_dir}\\Blind_log.exe" "{app_dir}" /e /y >nul
-        del "{zip_path}" >nul
-        rmdir /s /q "{temp_dir}" >nul
-        start Blind_log.exe
-        del "%~f0" >nul
-                """)
-
+def create_update_bat(zip_filename):
+    """Создаёт bat-файл для завершения программы, обновления файлов и автозапуска Blind_log.exe."""
+    bat_code = f"""@echo off
+cd /d %~dp0
+ping 127.0.0.1 -n 4 > nul
+powershell -command "Expand-Archive -Path '{zip_filename}' -DestinationPath 'temp'"
+move /Y "temp\\Blind_log.exe" "Blind_log.exe"
+rd /s /q temp
+del "{zip_filename}"
+start "" "Blind_log.exe"
+del "%~f0"
+"""
+    bat_path = os.path.join(get_app_path(), "update_later.bat")
+    with open(bat_path, "w", encoding="utf-8") as f:
+        f.write(bat_code)
     logging.info(f"Создан bat-файл: {bat_path}")

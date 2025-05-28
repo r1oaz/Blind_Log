@@ -1,18 +1,34 @@
 import wx
+import logging
+import nvda_notify
 from datetime import datetime, timedelta
+from qrz_lookup import QRZLookup
 
 class QSOManager:
     def __init__(self, parent=None, settings_manager=None):
         self.parent = parent
         if settings_manager is None:
             raise ValueError("SettingsManager не передан в QSOManager")
-        self.settings_manager = settings_manager  # Экземпляр SettingsManager
+        self.settings_manager = settings_manager
+        self._init_qrz_lookup()
         self.qso_list = []
         self.editing_index = None  # Индекс редактируемой записи
 
         # Установка значений по умолчанию для RST-принято и RST-передано
         self.text_ctrl_7 = None  # RST-принято
         self.text_ctrl_8 = None  # RST-передано
+
+    def _init_qrz_lookup(self):
+        qrz_username = self.settings_manager.settings.get("qrz_username", "")
+        qrz_password = self.settings_manager.settings.get("qrz_password", "")
+        use_qrz = self.settings_manager.settings.get("use_qrz_lookup", '1') == '1'
+        self.qrz_lookup = QRZLookup(qrz_username, qrz_password) if use_qrz else None
+        if use_qrz and self.qrz_lookup and not self.qrz_lookup.login():
+            nvda_notify.nvda_notify("Ошибка авторизации на QRZ.ru")
+
+    def reload_settings(self):
+        self.settings_manager.load_settings()
+        self._init_qrz_lookup()
 
     def add_qso(self, event):
         required_fields = {
@@ -138,7 +154,7 @@ class QSOManager:
         dlg.Destroy()
 
     def _show_notification(self, message):
-        wx.adv.NotificationMessage("Blind_Log", message).Show()
+        nvda_notify.nvda_notify(message)
 
     def _get_timezone_offset(self):
         """
@@ -171,3 +187,30 @@ class QSOManager:
             self.text_ctrl_7.SetValue("59")
         if self.text_ctrl_8:
             self.text_ctrl_8.SetValue("59")
+            
+
+    def on_callsign_enter(self, event):
+        """Обработчик события нажатия Enter в поле позывного."""
+        if not self.qrz_lookup:
+            nvda_notify.nvda_notify("Поиск по QRZ.ru отключён в настройках.")
+            return
+        callsign = self.text_ctrl_1.GetValue().strip().upper()
+        if not callsign:
+            return
+        try:
+            result = self.qrz_lookup.lookup_call(callsign)
+            if result:
+                # Вставляем значения из QRZ.ru только если они не пустые
+                self.text_ctrl_2.SetValue(result.get("name", ""))
+                self.text_ctrl_3.SetValue(result.get("city", ""))
+                nvda_notify.nvda_notify(f"Данные для {callsign} успешно загружены")
+                print(f"QRZ: Данные для {callsign} успешно загружены: {result}")
+                logging.info(f"QRZ: Данные для {callsign} успешно загружены: {result}")
+            else:
+                nvda_notify.nvda_notify(f"Позывной {callsign} не найден в базе QRZ.ru")
+                print(f"QRZ: Позывной {callsign} не найден в базе QRZ.ru")
+                logging.warning(f"QRZ: Позывной {callsign} не найден в базе QRZ.ru")
+        except Exception as e:
+            nvda_notify.nvda_notify(f"Ошибка поиска позывного: {e}")
+            print(f"Ошибка поиска позывного: {e}")
+            logging.error(f"Ошибка поиска позывного: {e}")

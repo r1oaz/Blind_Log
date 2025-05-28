@@ -16,7 +16,7 @@ jobs:
       - name: 🧾 Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # чтобы получить все теги и коммиты
 
       - name: 🐍 Set up Python
         uses: actions/setup-python@v4
@@ -58,6 +58,25 @@ jobs:
           }
         shell: pwsh
 
+      - name: 🏷️ Create tag from version
+        run: |
+          git tag v${{ steps.get_version.outputs.version }}
+          git push origin v${{ steps.get_version.outputs.version }}
+        shell: pwsh
+
+      - name: 📋 Generate changelog from commits
+        id: changelog
+        run: |
+          $lastTag = git describe --tags --abbrev=0
+          $changelog = git log $lastTag..HEAD --pretty=format:"- %s"
+          if (-not $changelog) {
+            $changelog = "No changes recorded."
+          }
+          echo "changelog<<EOF" >> $env:GITHUB_OUTPUT
+          echo "$changelog" >> $env:GITHUB_OUTPUT
+          echo "EOF" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
       - name: 🛠️ Build Blind_log.exe with PyInstaller
         run: |
           try {
@@ -86,7 +105,7 @@ jobs:
           }
         shell: pwsh
 
-      - name: 🚀 Create GitHub Release
+      - name: 🚀 Create GitHub Release with changelog
         id: create_release
         uses: actions/create-release@v1
         env:
@@ -94,6 +113,11 @@ jobs:
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
           release_name: Blind Log v${{ steps.get_version.outputs.version }}
+          body: |
+            ## Что нового в версии v${{ steps.get_version.outputs.version }}
+
+            ${{ steps.changelog.outputs.changelog }}
+
           draft: false
           prerelease: false
 
