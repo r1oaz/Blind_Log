@@ -73,10 +73,13 @@ class Blind_log(wx.Frame):
 
     def _init_add_qso_ui(self, panel):
         main_sizer = wx.BoxSizer(wx.VERTICAL)
-        
-        # Создание всех элементов с метками
+
+        # Поле "Позывной" с обработкой Enter
         label_1 = wx.StaticText(panel, label="Позывной:")
-        self.text_ctrl_1 = wx.TextCtrl(panel)
+        self.text_ctrl_1 = wx.TextCtrl(panel, style=wx.TE_PROCESS_ENTER)  # Добавляем стиль wx.TE_PROCESS_ENTER
+        self.text_ctrl_1.Bind(wx.EVT_TEXT_ENTER, self.qso_manager.on_callsign_enter)  # Привязываем обработчик события Enter
+
+        # Остальные поля
         label_2 = wx.StaticText(panel, label="Имя:")
         self.text_ctrl_2 = wx.TextCtrl(panel)
         label_3 = wx.StaticText(panel, label="Город:")
@@ -104,9 +107,9 @@ class Blind_log(wx.Frame):
         # Добавление элементов в интерфейс
         for label, ctrl in fields:
             row_sizer = wx.BoxSizer(wx.HORIZONTAL)
-            row_sizer.Add(label, 0, wx.ALIGN_CENTER_VERTICAL|wx.RIGHT, 10)
+            row_sizer.Add(label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
             row_sizer.Add(ctrl, 1, wx.EXPAND)
-            main_sizer.Add(row_sizer, 0, wx.EXPAND|wx.ALL, 5)
+            main_sizer.Add(row_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         # Выбор режима
         mode_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -244,6 +247,7 @@ class Blind_log(wx.Frame):
 
     def on_settings(self, event):
         self.settings_manager.show_settings()
+        self.qso_manager.reload_settings()  # Применить новые настройки сразу
 
     def on_exit(self, event):
         """

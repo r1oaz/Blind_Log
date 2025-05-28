@@ -6,7 +6,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('help.htm', '.'), ('version.txt', '.')],  # version.txt можно оставить как данные
+    datas=[('help.htm', '.'), ('version.txt', '.'), ('nvdaControllerClient64.dll', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
