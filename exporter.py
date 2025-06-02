@@ -11,11 +11,11 @@ class Exporter:
                            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fileDialog:
 
             if fileDialog.ShowModal() == wx.ID_CANCEL:
-                return  # Пользователь отменил сохранение
+                return False  # Пользователь отменил сохранение
 
             # Получение пути для сохранения файла
             pathname = fileDialog.GetPath()
-            self.export_to_adif(pathname)
+            return self.export_to_adif(pathname)
 
     def export_to_adif(self, filepath):
         # Убедиться, что настройки загружены
@@ -64,5 +64,7 @@ class Exporter:
                     file.write(adif_record)
 
             wx.MessageBox("Экспорт в ADIF завершен успешно!", "Экспорт", wx.OK | wx.ICON_INFORMATION)
+            return True
         except Exception as e:
             wx.MessageBox(f"Ошибка экспорта ADIF: {e}", "Ошибка", wx.OK | wx.ICON_ERROR)
+            return False

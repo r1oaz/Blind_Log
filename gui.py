@@ -36,6 +36,8 @@ class Blind_log(wx.Frame):
         self._init_accelerator()
         self.Layout()
         self.Centre()
+        # Добавляем обработчик закрытия окна
+        self.Bind(wx.EVT_CLOSE, self.on_close)
 
     def _init_ui(self):
         menubar = wx.MenuBar()
@@ -197,8 +199,8 @@ class Blind_log(wx.Frame):
         
         btn_sizer.Add(self.edit_btn, 0, wx.RIGHT, 10)
         btn_sizer.Add(self.del_btn, 0, wx.RIGHT, 10)
-        btn_sizer.Add(self.export_btn, 0)
-        
+        # self.export_btn больше не добавляется в интерфейс, но кнопка и обработчик остаются для Ctrl+S
+        # btn_sizer.Add(self.export_btn, 0)
         sizer.Add(self.journal_list, 1, wx.EXPAND|wx.ALL, 5)
         sizer.Add(btn_sizer, 0, wx.ALIGN_RIGHT|wx.ALL, 10)
         panel.SetSizer(sizer)
@@ -255,6 +257,39 @@ class Blind_log(wx.Frame):
         Завершает приложение без вызова проверки обновлений.
         """
         self.Close()  # Закрываем главное окно, завершая приложение
+
+    def on_close(self, event):
+        """
+        Обработчик закрытия окна (крестик или Alt+F4).
+        Если в журнале есть хотя бы одна запись, спрашивает о сохранении.
+        """
+        if len(self.qso_manager.qso_list) > 0:
+            dlg = wx.MessageDialog(
+                self,
+                "В журнале есть несохранённые записи. Сохранить журнал перед выходом?",
+                "Сохранить журнал?",
+                wx.YES_NO | wx.CANCEL | wx.ICON_QUESTION
+            )
+            dlg.SetYesNoCancelLabels("Сохранить", "Не сохранять", "Отмена")
+            result = dlg.ShowModal()
+            dlg.Destroy()
+            if result == wx.ID_YES:
+                # Открыть диалог экспорта ADIF
+                export_result = self.exporter.on_export(None)
+                if export_result:
+                    self.Destroy()
+                else:
+                    # Если экспорт не удался или отменён, не закрывать окно
+                    event.Veto()
+                    return
+            elif result == wx.ID_NO:
+                self.Destroy()
+            else:
+                # Отмена — не закрывать окно
+                event.Veto()
+                return
+        else:
+            self.Destroy()
 
     def _get_version_info(self):
         """
