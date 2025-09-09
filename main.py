@@ -17,13 +17,8 @@ class MyApp(wx.App):
         Инициализация приложения.
         """
         try:
-            # Настройка логирования для Blind_log
-            logging.basicConfig(
-                filename='blind_log.log',
-                level=logging.INFO,
-                format='%(asctime)s %(levelname)s %(message)s'
-            )
             self.settings_manager = SettingsManager()
+            # Настройка логирования теперь полностью управляется SettingsManager
             # Проверка обновлений при запуске, если включено в настройках
             if self.settings_manager.settings.get('check_updates_on_start', '1') == '1':
                 check_update(None, silent_if_latest=True)  # Не показывать сообщение при автозапуске
@@ -31,12 +26,6 @@ class MyApp(wx.App):
             self.frame.Show()
             return True
         except Exception as e:
-            import nvda_notify
-            nvda_notify.nvda_notify(f"Ошибка при запуске приложения: {e}")
-            print(f"Ошибка при запуске приложения: {e}")
-            logging.error(f"Ошибка при запуске приложения: {e}")
-            wx.MessageBox(f"Ошибка при запуске приложения: {e}", "Ошибка", wx.OK | wx.ICON_ERROR)
-            return False
             import nvda_notify
             nvda_notify.nvda_notify(f"Ошибка при запуске приложения: {e}")
             print(f"Ошибка при запуске приложения: {e}")

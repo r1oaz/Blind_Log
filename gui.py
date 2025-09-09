@@ -12,12 +12,16 @@ from qso_manager import QSOManager
 from exporter import Exporter
 from settings import SettingsManager
 
+# Создаем кастомные ID для пунктов меню
+ID_UPDATE = wx.NewIdRef()
+ID_CHANGELOG = wx.NewIdRef()
+
 
 def resource_path(relative_path):
     """Возвращает абсолютный путь к ресурсу, учитывая запуск из PyInstaller onefile."""
     try:
         base_path = sys._MEIPASS
-    except Exception:
+    except AttributeError:
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
@@ -26,6 +30,7 @@ class Blind_log(wx.Frame):
         kwds["style"] = kwds.get("style", 0) | wx.DEFAULT_FRAME_STYLE | wx.TAB_TRAVERSAL
         wx.Frame.__init__(self, *args, **kwds)
         
+        self.controls = {}
         self.SetTitle("Blind_Log")
         self.settings_manager = settings_manager  # Сохраняем экземпляр SettingsManager
         self.qso_manager = QSOManager(parent=self, settings_manager=self.settings_manager)  # Передаем settings_manager
@@ -43,120 +48,106 @@ class Blind_log(wx.Frame):
         menubar = wx.MenuBar()
         file_menu = wx.Menu()
         file_menu.Append(wx.ID_PREFERENCES, "Настройки\tCtrl+P")
-        file_menu.Append(wx.ID_EXIT, "Выход\tCtrl+Q")  # Используем стандартный идентификатор wx.ID_EXIT
+        file_menu.Append(wx.ID_EXIT, "Выход\tCtrl+Q")
         menubar.Append(file_menu, "Файл")
-        
+
         help_menu = wx.Menu()
         help_menu.Append(wx.ID_ABOUT, "О программе\tShift+F1")
         help_menu.Append(wx.ID_HELP, "Справка\tF1")
-        self.check_updates_id = wx.NewId()  # Создаем уникальный идентификатор для "Проверить обновления"
-        help_menu.Append(self.check_updates_id, "Проверить обновления\tCtrl+U")  # Используем уникальный идентификатор
+        help_menu.Append(ID_UPDATE, "Проверить обновления\tCtrl+U")
+        help_menu.Append(ID_CHANGELOG, "Что нового\tCtrl+F1")
         menubar.Append(help_menu, "Помощь")
-        
         self.SetMenuBar(menubar)
-        
+
         self.notebook = wx.Notebook(self, style=wx.NB_LEFT)
         self.notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_page_changed)
-        
+
         add_panel = wx.Panel(self.notebook)
         self._init_add_qso_ui(add_panel)
         self.notebook.AddPage(add_panel, "Добавить QSO")
-        
+
         journal_panel = wx.Panel(self.notebook)
         self._init_journal_ui(journal_panel)
         self.notebook.AddPage(journal_panel, "Журнал")
-        
+
         # Привязываем обработчики к правильным идентификаторам
         self.Bind(wx.EVT_MENU, self.on_exit, id=wx.ID_EXIT)
         self.Bind(wx.EVT_MENU, self.on_settings, id=wx.ID_PREFERENCES)
         self.Bind(wx.EVT_MENU, self.on_about, id=wx.ID_ABOUT)
         self.Bind(wx.EVT_MENU, self.on_help, id=wx.ID_HELP)
-        self.Bind(wx.EVT_MENU, self.on_check_updates, id=self.check_updates_id)  # Привязываем к уникальному идентификатору
+        self.Bind(wx.EVT_MENU, self.on_check_updates, id=ID_UPDATE)
+        self.Bind(wx.EVT_MENU, self.on_show_changelog, id=ID_CHANGELOG)
 
     def _init_add_qso_ui(self, panel):
         main_sizer = wx.BoxSizer(wx.VERTICAL)
-
-        # Поле "Позывной" с обработкой Enter
-        label_1 = wx.StaticText(panel, label="Позывной:")
-        self.text_ctrl_1 = wx.TextCtrl(panel, style=wx.TE_PROCESS_ENTER)  # Добавляем стиль wx.TE_PROCESS_ENTER
-        self.text_ctrl_1.Bind(wx.EVT_TEXT_ENTER, self.qso_manager.on_callsign_enter)  # Привязываем обработчик события Enter
-
-        # Остальные поля
-        label_2 = wx.StaticText(panel, label="Имя:")
-        self.text_ctrl_2 = wx.TextCtrl(panel)
-        label_3 = wx.StaticText(panel, label="Город:")
-        self.text_ctrl_3 = wx.TextCtrl(panel)
-        label_4 = wx.StaticText(panel, label="QTH:")
-        self.text_ctrl_4 = wx.TextCtrl(panel)
-        label_6 = wx.StaticText(panel, label="Частота:")
-        self.text_ctrl_6 = wx.TextCtrl(panel)
-        label_7 = wx.StaticText(panel, label="RST-принято:")
-        self.text_ctrl_7 = wx.TextCtrl(panel)
-        label_8 = wx.StaticText(panel, label="RST-передано:")
-        self.text_ctrl_8 = wx.TextCtrl(panel)
-
-        # Группировка полей
-        fields = [
-            (label_1, self.text_ctrl_1),
-            (label_2, self.text_ctrl_2),
-            (label_3, self.text_ctrl_3),
-            (label_4, self.text_ctrl_4),
-            (label_6, self.text_ctrl_6),
-            (label_7, self.text_ctrl_7),
-            (label_8, self.text_ctrl_8),
+        
+        # Определения полей для формы
+        field_definitions = [
+            ('call', "Позывной:", wx.TextCtrl, {'style': wx.TE_PROCESS_ENTER}),
+            ('name', "Имя:", wx.TextCtrl, {}),
+            ('city', "Город:", wx.TextCtrl, {}),
+            ('qth', "QTH:", wx.TextCtrl, {}),
+            ('freq', "Частота:", wx.TextCtrl, {}),
+            ('rst_received', "RST-принято:", wx.TextCtrl, {}),
+            ('rst_sent', "RST-передано:", wx.TextCtrl, {}),
         ]
 
-        # Добавление элементов в интерфейс
-        for label, ctrl in fields:
+        # Создание и размещение текстовых полей
+        for key, label_text, ctrl_class, styles in field_definitions:
             row_sizer = wx.BoxSizer(wx.HORIZONTAL)
-            row_sizer.Add(label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
+            label = wx.StaticText(panel, label=label_text)
+            ctrl = ctrl_class(panel, **styles)
+            self.controls[key] = ctrl
+            
+            row_sizer.Add(label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
             row_sizer.Add(ctrl, 1, wx.EXPAND)
             main_sizer.Add(row_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        # Привязка Enter для позывного
+        self.controls['call'].Bind(wx.EVT_TEXT_ENTER, self.qso_manager.on_callsign_enter)
 
         # Выбор режима
         mode_sizer = wx.BoxSizer(wx.HORIZONTAL)
         mode_label = wx.StaticText(panel, label="Режим:")
-        self.mode_selector = wx.Choice(panel, choices=["AM", "FM", "SSB", "CW"])
-        self.mode_selector.SetSelection(0)
-        mode_sizer.Add(mode_label, 0, wx.ALIGN_CENTER_VERTICAL|wx.RIGHT, 10)
-        mode_sizer.Add(self.mode_selector, 1, wx.EXPAND)
+        self.controls['mode'] = wx.Choice(panel, choices=["AM", "FM", "SSB", "CW"])
+        self.controls['mode'].SetSelection(2) # SSB по умолчанию
+        mode_sizer.Add(mode_label, 0, wx.ALIGN_CENTER_VERTICAL|wx.RIGHT, 5)
+        mode_sizer.Add(self.controls['mode'], 1, wx.EXPAND)
         main_sizer.Add(mode_sizer, 0, wx.EXPAND|wx.ALL, 5)
 
         # Выбор диапазона
         band_sizer = wx.BoxSizer(wx.HORIZONTAL)
         band_label = wx.StaticText(panel, label="Диапазон:")
-        self.band_selector = wx.Choice(panel, choices=[
-            "160m", "80m", "40m", 
-            "20m", "10m", "6m",
-            "2m", "70sm"
+        self.controls['band'] = wx.Choice(panel, choices=[
+            "160m", "80m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "2m", "70cm"
         ])
-        self.band_selector.SetSelection(0)
-        band_sizer.Add(band_label, 0, wx.ALIGN_CENTER_VERTICAL|wx.RIGHT, 10)
-        band_sizer.Add(self.band_selector, 1, wx.EXPAND)
+        self.controls['band'].SetSelection(2) # 40m по умолчанию
+        band_sizer.Add(band_label, 0, wx.ALIGN_CENTER_VERTICAL|wx.RIGHT, 5)
+        band_sizer.Add(self.controls['band'], 1, wx.EXPAND)
         main_sizer.Add(band_sizer, 0, wx.EXPAND|wx.ALL, 5)
 
         # Комментарий
         comment_label = wx.StaticText(panel, label="Комментарий:")
-        self.comment_ctrl = wx.TextCtrl(panel, style=wx.TE_MULTILINE)
+        self.controls['comment'] = wx.TextCtrl(panel, style=wx.TE_MULTILINE)
         main_sizer.Add(comment_label, 0, wx.TOP|wx.LEFT, 5)
-        main_sizer.Add(self.comment_ctrl, 1, wx.EXPAND|wx.ALL, 5)
+        main_sizer.Add(self.controls['comment'], 1, wx.EXPAND|wx.ALL, 5)
 
         # Поля для даты и времени
         date_time_sizer = wx.BoxSizer(wx.HORIZONTAL)
         date_label = wx.StaticText(panel, label="Дата:")
-        self.date_ctrl = wx.adv.DatePickerCtrl(panel, style=wx.adv.DP_DROPDOWN | wx.adv.DP_SHOWCENTURY)
+        self.controls['date'] = wx.adv.DatePickerCtrl(panel, style=wx.adv.DP_DROPDOWN | wx.adv.DP_SHOWCENTURY)
         time_label = wx.StaticText(panel, label="Время:")
-        self.time_ctrl = wx.adv.TimePickerCtrl(panel)
-        date_time_sizer.Add(date_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
-        date_time_sizer.Add(self.date_ctrl, 1, wx.EXPAND | wx.RIGHT, 10)
-        date_time_sizer.Add(time_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
-        date_time_sizer.Add(self.time_ctrl, 1, wx.EXPAND)
+        self.controls['time'] = wx.adv.TimePickerCtrl(panel)
+        date_time_sizer.Add(date_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        date_time_sizer.Add(self.controls['date'], 1, wx.EXPAND | wx.RIGHT, 10)
+        date_time_sizer.Add(time_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        date_time_sizer.Add(self.controls['time'], 1, wx.EXPAND)
         main_sizer.Add(date_time_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         # Установка начальных значений для даты и времени
         current_time = self.qso_manager._get_current_time_with_timezone()
-        self.date_ctrl.SetValue(wx.DateTime.FromDMY(current_time.day, current_time.month - 1, current_time.year))
-        self.time_ctrl.SetValue(wx.DateTime.FromHMS(current_time.hour, current_time.minute, 0))  # Убираем секунды
+        self.controls['date'].SetValue(wx.DateTime.FromDMY(current_time.day, current_time.month - 1, current_time.year))
+        self.controls['time'].SetValue(wx.DateTime.FromHMS(current_time.hour, current_time.minute, 0))  # Убираем секунды
 
         # Кнопка добавления
         self.add_btn = wx.Button(panel, label="Добавить QSO")
@@ -164,21 +155,10 @@ class Blind_log(wx.Frame):
         
         panel.SetSizer(main_sizer)
         self.add_btn.Bind(wx.EVT_BUTTON, self.qso_manager.add_qso)
-        self.text_ctrl_1.SetFocus()
+        self.controls['call'].SetFocus()
 
-        # Привязка полей к менеджеру QSO
-        self.qso_manager.text_ctrl_1 = self.text_ctrl_1
-        self.qso_manager.text_ctrl_2 = self.text_ctrl_2
-        self.qso_manager.text_ctrl_3 = self.text_ctrl_3
-        self.qso_manager.text_ctrl_4 = self.text_ctrl_4
-        self.qso_manager.text_ctrl_6 = self.text_ctrl_6
-        self.qso_manager.text_ctrl_7 = self.text_ctrl_7
-        self.qso_manager.text_ctrl_8 = self.text_ctrl_8
-        self.qso_manager.comment_ctrl = self.comment_ctrl
-        self.qso_manager.band_selector = self.band_selector
-        self.qso_manager.mode_selector = self.mode_selector
-        self.qso_manager.date_ctrl = self.date_ctrl  # Привязка поля даты
-        self.qso_manager.time_ctrl = self.time_ctrl  # Привязка поля времени
+        # Передаем словарь с элементами управления в менеджер QSO
+        self.qso_manager.set_controls(self.controls)
 
         # Установка значений по умолчанию для RST-принято и RST-передано
         self.qso_manager._initialize_rst_fields()
@@ -229,20 +209,41 @@ class Blind_log(wx.Frame):
 
     def _init_accelerator(self):
         accel_entries = [
-            (wx.ACCEL_CTRL, wx.WXK_RETURN, self.add_btn.GetId()),  # Ctrl+Enter для добавления QSO
-            (wx.ACCEL_CTRL, ord('E'), self.edit_btn.GetId()),        # Ctrl+E для редактирования
-            (wx.ACCEL_CTRL, ord('S'), self.export_btn.GetId()),        # Ctrl+S для экспорта
-            (wx.ACCEL_NORMAL, wx.WXK_DELETE, self.del_btn.GetId()),    # Delete для удаления
-            (wx.ACCEL_SHIFT, wx.WXK_F1, wx.ID_ABOUT),                  # Shift+F1 для "О программе"
-            (wx.ACCEL_NORMAL, wx.WXK_F1, wx.ID_HELP)                   # F1 для "Справка"
+            (wx.ACCEL_CTRL, wx.WXK_RETURN, self.add_btn.GetId()),
+            (wx.ACCEL_CTRL, ord('E'), self.edit_btn.GetId()),
+            (wx.ACCEL_CTRL, ord('S'), self.export_btn.GetId()),
+            (wx.ACCEL_NORMAL, wx.WXK_DELETE, self.del_btn.GetId()),
+            (wx.ACCEL_SHIFT, wx.WXK_F1, wx.ID_ABOUT),
+            (wx.ACCEL_NORMAL, wx.WXK_F1, wx.ID_HELP),
+            (wx.ACCEL_CTRL, wx.WXK_F1, ID_CHANGELOG),
+            (wx.ACCEL_CTRL, ord('U'), ID_UPDATE),
         ]
         accel_tbl = wx.AcceleratorTable([wx.AcceleratorEntry(*entry) for entry in accel_entries])
         self.SetAcceleratorTable(accel_tbl)
+    def on_show_changelog(self, event):
+        changelog_path = resource_path("changeLog.txt")
+        try:
+            with open(changelog_path, "r", encoding="utf-8") as f:
+                changelog_text = f.read()
+        except Exception as e:
+            wx.MessageBox(f"Не удалось открыть changeLog.txt: {e}", "Ошибка", wx.OK | wx.ICON_ERROR)
+            return
+
+        dlg = wx.Dialog(self, title="История изменений (changelog)", size=(600, 500))
+        vbox = wx.BoxSizer(wx.VERTICAL)
+        text_ctrl = wx.TextCtrl(dlg, value=changelog_text, style=wx.TE_MULTILINE|wx.TE_READONLY|wx.HSCROLL)
+        vbox.Add(text_ctrl, 1, wx.EXPAND|wx.ALL, 10)
+        btn = wx.Button(dlg, label="Закрыть")
+        btn.Bind(wx.EVT_BUTTON, lambda evt: dlg.Close())
+        vbox.Add(btn, 0, wx.ALIGN_CENTER|wx.ALL, 10)
+        dlg.SetSizer(vbox)
+        dlg.ShowModal()
+        dlg.Destroy()
 
     def on_page_changed(self, event):
         selected_page = self.notebook.GetSelection()
         if (selected_page == 0):
-            self.text_ctrl_1.SetFocus()
+            self.controls['call'].SetFocus()
         elif (selected_page == 1):
             self.journal_list.SetFocus()
         event.Skip()

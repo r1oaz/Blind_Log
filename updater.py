@@ -6,6 +6,7 @@ import subprocess
 import shutil
 import logging
 import wx
+import re
 
 # Логгирование
 log_path = os.path.join(os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__), "updater.log")
@@ -29,11 +30,10 @@ def parse_version_txt(path):
     """Читает текущую версию из файла version.txt."""
     try:
         with open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                if "FileVersion" in line:
-                    parts = line.split("'")
-                    if len(parts) >= 4:
-                        return parts[3]
+            content = f.read()
+            match = re.search(r"StringStruct\('FileVersion', '(.+?)'\)", content)
+            if match:
+                return match.group(1)
     except FileNotFoundError:
         logging.error("Файл version.txt не найден.")
     except Exception as e:
@@ -54,11 +54,12 @@ def check_update(parent_frame, silent_if_latest=False):
         return
 
     try:
-        response = requests.get("https://api.github.com/repos/r1oaz/blind_log/releases/latest")
+        response = requests.get("https://api.github.com/repos/r1oaz/blind_log/releases/latest", timeout=15)
         response.raise_for_status()
         data = response.json()
         latest_version = data["tag_name"]
         download_url = None
+        changelog = data.get("body", "")
 
         for asset in data["assets"]:
             if asset["name"].endswith(".zip"):
@@ -78,21 +79,34 @@ def check_update(parent_frame, silent_if_latest=False):
             wx.CallAfter(wx.MessageBox, f"У вас уже установлена последняя версия: {current_version}", "Обновление", wx.ICON_INFORMATION)
         return
 
-    dlg = wx.MessageDialog(
-        parent_frame,
-        f"Доступна новая версия {latest_version}.\n\n"
-        "Для обновления необходимо завершить программу.\n"
-        "Если у вас есть несохранённый журнал, нажмите «Нет», сохраните его и снова запустите проверку обновлений.\n\n"
-        "Обновить сейчас?",
-        "Обновление",
-        wx.YES_NO | wx.ICON_QUESTION
-    )
+    # Показываем changelog пользователю
+    dlg = wx.Dialog(parent_frame, title=f"Доступна новая версия {latest_version}", size=(600, 500))
+    vbox = wx.BoxSizer(wx.VERTICAL)
+    info = wx.StaticText(dlg, label="Что нового в этой версии:")
+    vbox.Add(info, 0, wx.ALL, 10)
+    text_ctrl = wx.TextCtrl(dlg, value=changelog, style=wx.TE_MULTILINE|wx.TE_READONLY|wx.HSCROLL)
+    vbox.Add(text_ctrl, 1, wx.EXPAND|wx.ALL, 10)
+    btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+    btn_update = wx.Button(dlg, label="Обновить")
+    btn_cancel = wx.Button(dlg, label="Отмена")
+    btn_sizer.Add(btn_update, 0, wx.RIGHT, 10)
+    btn_sizer.Add(btn_cancel, 0)
+    vbox.Add(btn_sizer, 0, wx.ALIGN_CENTER|wx.ALL, 10)
+    dlg.SetSizer(vbox)
 
-    if dlg.ShowModal() == wx.ID_NO:
-        dlg.Destroy()
-        return
-
+    result = [None]
+    def on_update(evt):
+        result[0] = True
+        dlg.Close()
+    def on_cancel(evt):
+        result[0] = False
+        dlg.Close()
+    btn_update.Bind(wx.EVT_BUTTON, on_update)
+    btn_cancel.Bind(wx.EVT_BUTTON, on_cancel)
+    dlg.ShowModal()
     dlg.Destroy()
+    if not result[0]:
+        return
 
     # Загружаем и обновляем
     download_and_update(download_url, parent_frame)
@@ -118,7 +132,7 @@ def download_and_update(download_url, parent_frame):
 
         # Загружаем архив
         logging.info(f"Скачиваем обновление из {download_url}")
-        response = requests.get(download_url, stream=True)
+        response = requests.get(download_url, stream=True, timeout=60)
         response.raise_for_status()
 
         total_size = int(response.headers.get('content-length', 0))

@@ -31,21 +31,6 @@ jobs:
           venv\Scripts\python.exe -m pip install pyinstaller
         shell: pwsh
 
-      - name: 🕒 Update version.txt and amend commit
-        run: |
-          try {
-            venv\Scripts\python.exe update_version.py
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add version.txt
-            git commit --amend --no-edit
-            git push --force-with-lease
-          } catch {
-            Write-Error "❌ Ошибка при обновлении версии: $_"
-            exit 1
-          }
-        shell: pwsh
-
       - name: 🔍 Extract version from version.txt
         id: get_version
         run: |
@@ -58,26 +43,23 @@ jobs:
           }
         shell: pwsh
 
-      - name: 🏷️ Create tag from version
+      - name: 📜 Extract changelog from changeLog.txt
+        id: changelog_file
         run: |
-          git tag v${{ steps.get_version.outputs.version }}
-          git push origin v${{ steps.get_version.outputs.version }}
-        shell: pwsh
-
-      - name: 📋 Generate changelog from commits
-        id: changelog
-        run: |
-          $lastTag = git describe --tags --abbrev=0
-          $changelog = git log $lastTag..HEAD --pretty=format:"- %s"
-          if (-not $changelog) {
-            $changelog = "No changes recorded."
+          $lines = Get-Content changeLog.txt -Encoding utf8
+          $desc = ""
+          foreach ($line in $lines) {
+            if ($line -match '^---+$') { break }
+            $desc += "$line`n"
           }
-          echo "changelog<<EOF" >> $env:GITHUB_OUTPUT
-          echo "$changelog" >> $env:GITHUB_OUTPUT
-          echo "EOF" >> $env:GITHUB_OUTPUT
+          $desc = $desc.TrimEnd("`n")
+          $eof = [System.Guid]::NewGuid().ToString()
+          echo "changelog<<$eof" >> $env:GITHUB_OUTPUT
+          echo "$desc" >> $env:GITHUB_OUTPUT
+          echo "$eof" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
-      - name: 🛠️ Build Blind_log.exe with PyInstaller
+      - name: ️ Build Blind_log.exe with PyInstaller
         run: |
           try {
             venv\Scripts\pyinstaller.exe Blind_log.spec
@@ -113,11 +95,7 @@ jobs:
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
           release_name: Blind Log v${{ steps.get_version.outputs.version }}
-          body: |
-            ## Что нового в версии v${{ steps.get_version.outputs.version }}
-
-            ${{ steps.changelog.outputs.changelog }}
-
+          body: ${{ steps.changelog_file.outputs.changelog }}
           draft: false
           prerelease: false
 

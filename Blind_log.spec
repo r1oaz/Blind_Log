@@ -2,11 +2,10 @@
 
 from PyInstaller.utils.win32.versioninfo import VSVersionInfo, FixedFileInfo, StringFileInfo, StringTable, StringStruct, VarFileInfo, VarStruct
 
-a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('help.htm', '.'), ('version.txt', '.'), ('nvdaControllerClient64.dll', '.')],
+    datas=[('help.htm', '.'), ('version.txt', '.'), ('nvdaControllerClient64.dll', '.'), ('changeLog.txt', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

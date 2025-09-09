@@ -62,10 +62,17 @@ class SettingsManager:
         self.apply_logging()
 
     def apply_logging(self):
+        # Используем force=True (для Python 3.8+), чтобы перенастроить logging.
+        # Это позволяет централизованно управлять логированием из этого класса.
         if self.settings.get('log_enabled', '0') == '1':
-            logging.basicConfig(filename='blind_log.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+            logging.basicConfig(filename='blind_log.log', level=logging.INFO,
+                                format='%(asctime)s - %(levelname)s - %(message)s',
+                                force=True, encoding='utf-8')
         else:
-            logging.getLogger().handlers.clear()
+            # Отключаем логирование, удаляя все обработчики из корневого логгера
+            root_logger = logging.getLogger()
+            for handler in root_logger.handlers[:]:
+                root_logger.removeHandler(handler)
 
     def show_info_message(self, message):
         dlg = wx.MessageDialog(None, message, "Информация", wx.OK | wx.ICON_INFORMATION)

@@ -11,12 +11,12 @@ class QSOManager:
             raise ValueError("SettingsManager не передан в QSOManager")
         self.settings_manager = settings_manager
         self._init_qrz_lookup()
+        self.controls = {}
         self.qso_list = []
         self.editing_index = None  # Индекс редактируемой записи
 
-        # Установка значений по умолчанию для RST-принято и RST-передано
-        self.text_ctrl_7 = None  # RST-принято
-        self.text_ctrl_8 = None  # RST-передано
+    def set_controls(self, controls):
+        self.controls = controls
 
     def _init_qrz_lookup(self):
         qrz_username = self.settings_manager.settings.get("qrz_username", "")
@@ -24,16 +24,22 @@ class QSOManager:
         use_qrz = self.settings_manager.settings.get("use_qrz_lookup", '1') == '1'
         self.qrz_lookup = QRZLookup(qrz_username, qrz_password) if use_qrz else None
         if use_qrz and self.qrz_lookup and not self.qrz_lookup.login():
-            nvda_notify.nvda_notify("Ошибка авторизации на QRZ.ru")
+            wx.MessageBox(
+                "Ошибка авторизации на QRZ.ru. Проверьте логин и пароль для XML API.",
+                "Ошибка",
+                wx.OK | wx.ICON_ERROR
+            )
 
     def reload_settings(self):
         self.settings_manager.load_settings()
         self._init_qrz_lookup()
 
     def add_qso(self, event):
+        call_ctrl = self.controls.get('call')
+        name_ctrl = self.controls.get('name')
         required_fields = {
-            'Позывной': (self.text_ctrl_1, self.text_ctrl_1.GetValue().strip().upper()),  # Преобразование в заглавные буквы
-            'Имя': (self.text_ctrl_2, self.text_ctrl_2.GetValue().strip().title())  # Преобразование первых букв в заглавные
+            'Позывной': (call_ctrl, call_ctrl.GetValue().strip().upper() if call_ctrl else ""),
+            'Имя': (name_ctrl, name_ctrl.GetValue().strip().title() if name_ctrl else "")
         }
         
         missing = []
@@ -53,24 +59,24 @@ class QSOManager:
             return
         
         # Получение и обработка значения частоты
-        freq_value = self.text_ctrl_6.GetValue().strip().replace(",", ".")  # Заменяем запятую на точку
+        freq_value = self.controls['freq'].GetValue().strip().replace(",", ".")  # Заменяем запятую на точку
 
         # Получение даты и времени из полей
-        date_value = self.date_ctrl.GetValue()
-        time_value = self.time_ctrl.GetValue()
+        date_value = self.controls['date'].GetValue()
+        time_value = self.controls['time'].GetValue()
         datetime_str = f"{date_value.FormatISODate()} {time_value.Format('%H:%M')}"  # Убираем секунды
 
         qso_data = {
             'call': required_fields['Позывной'][1],
             'name': required_fields['Имя'][1],
-            'city': self.text_ctrl_3.GetValue().strip().title(),  # Поле "Город" необязательно
-            'qth': self.text_ctrl_4.GetValue().strip().upper(),  # Преобразование всех букв в заглавные
-            'band': self.band_selector.GetStringSelection(),
-            'mode': self.mode_selector.GetStringSelection(),  # Добавление режима
+            'city': self.controls['city'].GetValue().strip().title(),
+            'qth': self.controls['qth'].GetValue().strip().upper(),
+            'band': self.controls['band'].GetStringSelection(),
+            'mode': self.controls['mode'].GetStringSelection(),
             'freq': freq_value,  # Используем обработанное значение частоты
-            'rst_received': self.text_ctrl_7.GetValue().strip(),
-            'rst_sent': self.text_ctrl_8.GetValue().strip(),
-            'comment': self.comment_ctrl.GetValue().strip().capitalize(),  # Преобразование первой буквы в заглавную
+            'rst_received': self.controls['rst_received'].GetValue().strip(),
+            'rst_sent': self.controls['rst_sent'].GetValue().strip(),
+            'comment': self.controls['comment'].GetValue().strip().capitalize(),
             'datetime': datetime_str
         }
         
@@ -82,7 +88,7 @@ class QSOManager:
         
         self._update_journal()
         self._clear_fields()
-        self.text_ctrl_1.SetFocus()
+        self.controls['call'].SetFocus()
         self._show_notification("QSO добавлен в журнал")
 
     def edit_qso(self, event):
@@ -91,20 +97,23 @@ class QSOManager:
             self._show_error("Выберите запись для редактирования")
             return
         
+        # Переключаемся на вкладку "Добавить QSO" для удобства пользователя
+        self.parent.notebook.SetSelection(0)
+        
         qso_data = self.qso_list[selected_index]
-        self.text_ctrl_1.SetValue(qso_data['call'])
-        self.text_ctrl_2.SetValue(qso_data['name'])
-        self.text_ctrl_3.SetValue(qso_data['city'])
-        self.text_ctrl_4.SetValue(qso_data['qth'])
-        self.band_selector.SetStringSelection(qso_data['band'])
-        self.mode_selector.SetStringSelection(qso_data['mode'])
-        self.text_ctrl_6.SetValue(qso_data['freq'])
-        self.text_ctrl_7.SetValue(qso_data['rst_received'])
-        self.text_ctrl_8.SetValue(qso_data['rst_sent'])
-        self.comment_ctrl.SetValue(qso_data['comment'])
+        self.controls['call'].SetValue(qso_data['call'])
+        self.controls['name'].SetValue(qso_data['name'])
+        self.controls['city'].SetValue(qso_data['city'])
+        self.controls['qth'].SetValue(qso_data['qth'])
+        self.controls['band'].SetStringSelection(qso_data['band'])
+        self.controls['mode'].SetStringSelection(qso_data['mode'])
+        self.controls['freq'].SetValue(qso_data['freq'])
+        self.controls['rst_received'].SetValue(qso_data['rst_received'])
+        self.controls['rst_sent'].SetValue(qso_data['rst_sent'])
+        self.controls['comment'].SetValue(qso_data['comment'])
         
         self.editing_index = selected_index  # Сохранение индекса редактируемой записи
-        self.text_ctrl_1.SetFocus()  # Установка фокуса на поле "Позывной"
+        self.controls['call'].SetFocus()  # Установка фокуса на поле "Позывной"
 
     def del_qso(self, event):
         selected_index = self.journal_list.GetFirstSelected()
@@ -136,17 +145,17 @@ class QSOManager:
         """
         Очищает все поля ввода, кроме RST-принято, RST-передано и Частоты.
         """
-        controls = [
-            self.text_ctrl_1, self.text_ctrl_2, self.text_ctrl_3,
-            self.text_ctrl_4, self.comment_ctrl
+        controls_to_clear = [
+            'call', 'name', 'city', 'qth', 'comment'
         ]
-        for ctrl in controls:
-            ctrl.SetValue("")
+        for key in controls_to_clear:
+            if key in self.controls:
+                self.controls[key].SetValue("")
 
         # Устанавливаем дату и время с учетом часового пояса
         current_time = self._get_current_time_with_timezone()
-        self.date_ctrl.SetValue(wx.DateTime.FromDMY(current_time.day, current_time.month - 1, current_time.year))
-        self.time_ctrl.SetValue(wx.DateTime.FromHMS(current_time.hour, current_time.minute, 0))  # Убираем секунды
+        self.controls['date'].SetValue(wx.DateTime.FromDMY(current_time.day, current_time.month - 1, current_time.year))
+        self.controls['time'].SetValue(wx.DateTime.FromHMS(current_time.hour, current_time.minute, 0))  # Убираем секунды
 
     def _show_error(self, message):
         dlg = wx.MessageDialog(self.parent, message, "Ошибка ввода", wx.OK|wx.ICON_ERROR)
@@ -183,10 +192,10 @@ class QSOManager:
         """
         Устанавливает значения по умолчанию для полей RST-принято и RST-передано.
         """
-        if self.text_ctrl_7:
-            self.text_ctrl_7.SetValue("59")
-        if self.text_ctrl_8:
-            self.text_ctrl_8.SetValue("59")
+        if 'rst_received' in self.controls:
+            self.controls['rst_received'].SetValue("59")
+        if 'rst_sent' in self.controls:
+            self.controls['rst_sent'].SetValue("59")
             
 
     def on_callsign_enter(self, event):
@@ -194,15 +203,15 @@ class QSOManager:
         if not self.qrz_lookup:
             nvda_notify.nvda_notify("Поиск по QRZ.ru отключён в настройках.")
             return
-        callsign = self.text_ctrl_1.GetValue().strip().upper()
+        callsign = self.controls['call'].GetValue().strip().upper()
         if not callsign:
             return
         try:
             result = self.qrz_lookup.lookup_call(callsign)
             if result:
                 # Вставляем значения из QRZ.ru только если они не пустые
-                self.text_ctrl_2.SetValue(result.get("name", ""))
-                self.text_ctrl_3.SetValue(result.get("city", ""))
+                self.controls['name'].SetValue(result.get("name", ""))
+                self.controls['city'].SetValue(result.get("city", ""))
                 nvda_notify.nvda_notify(f"Данные для {callsign} успешно загружены")
                 print(f"QRZ: Данные для {callsign} успешно загружены: {result}")
                 logging.info(f"QRZ: Данные для {callsign} успешно загружены: {result}")
