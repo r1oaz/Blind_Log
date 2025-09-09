@@ -1,7 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+
 from PyInstaller.utils.win32.versioninfo import VSVersionInfo, FixedFileInfo, StringFileInfo, StringTable, StringStruct, VarFileInfo, VarStruct
 
+a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
