@@ -21,7 +21,7 @@ class QSOManager:
     def _init_qrz_lookup(self):
         qrz_username = self.settings_manager.settings.get("qrz_username", "")
         qrz_password = self.settings_manager.settings.get("qrz_password", "")
-        use_qrz = self.settings_manager.settings.get("use_qrz_lookup", '1') == '1'
+        use_qrz = self.settings_manager.settings.get("use_qrz_lookup", '0') == '1'
         self.qrz_lookup = QRZLookup(qrz_username, qrz_password) if use_qrz else None
         if use_qrz and self.qrz_lookup and not self.qrz_lookup.login():
             wx.MessageBox(

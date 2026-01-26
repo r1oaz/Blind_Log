@@ -7,7 +7,8 @@ class Exporter:
         self.settings_manager = settings_manager
 
     def on_export(self, event):
-        with wx.FileDialog(None, "Сохранить файл ADIF", wildcard="ADIF files (*.adi)|*.adi",
+        parent = self.qso_manager.parent if self.qso_manager.parent else None
+        with wx.FileDialog(parent, "Сохранить файл ADIF", wildcard="ADIF files (*.adi)|*.adi",
                            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fileDialog:
 
             if fileDialog.ShowModal() == wx.ID_CANCEL:
