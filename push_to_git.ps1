@@ -72,7 +72,7 @@ if ($tagConfirm.Trim().Substring(0,1).ToLower() -eq "y") {
         $content = $content -replace "(FileVersion',\s*'[^']+')", "FileVersion', '$version'"
         $content = $content -replace "(ProductVersion',\s*'[^']+')", "ProductVersion', '$version'"
 
-        Set-Content version.txt $content -Encoding UTF8
+        Set-Content version.txt $content -Encoding UTF8NoBOM
         Write-Host "📁 version.txt обновлён"
     }
     catch {
