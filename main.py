@@ -20,7 +20,7 @@ class MyApp(wx.App):
             self.settings_manager = SettingsManager()
             # Настройка логирования теперь полностью управляется SettingsManager
             # Проверка обновлений при запуске, если включено в настройках
-            if self.settings_manager.settings.get('check_updates_on_start', '1') == '1':
+            if self.settings_manager.get_option('check_updates_on_start') == '1':
                 check_update(None, silent_if_latest=True)  # Не показывать сообщение при автозапуске
             self.frame = Blind_log(None, settings_manager=self.settings_manager)  # Передаем settings_manager
             self.frame.Show()

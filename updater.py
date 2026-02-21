@@ -6,39 +6,11 @@ import subprocess
 import shutil
 import logging
 import wx
-import re
 
-# Логгирование
-log_path = os.path.join(os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__), "updater.log")
-logging.basicConfig(filename=log_path, level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+from utils import resource_path, get_app_path, get_version
 
-def resource_path(relative_path):
-    """Возвращает абсолютный путь к ресурсу, учитывая запуск из PyInstaller onefile."""
-    try:
-        base_path = sys._MEIPASS
-    except AttributeError:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
+logger = logging.getLogger(__name__)
 
-def get_app_path():
-    """Возвращает путь к текущему приложению."""
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
-
-def parse_version_txt(path):
-    """Читает текущую версию из файла version.txt."""
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            content = f.read()
-            match = re.search(r"StringStruct\('FileVersion', '(.+?)'\)", content)
-            if match:
-                return match.group(1)
-    except FileNotFoundError:
-        logging.error("Файл version.txt не найден.")
-    except Exception as e:
-        logging.error(f"Ошибка при чтении version.txt: {e}")
-    return None
 
 def version_tuple(v):
     """Преобразует строку версии в кортеж чисел."""
@@ -46,8 +18,7 @@ def version_tuple(v):
 
 def check_update(parent_frame, silent_if_latest=False):
     """Проверяет наличие обновлений и запускает процесс обновления."""
-    version_path = resource_path("version.txt")
-    current_version = parse_version_txt(version_path)
+    current_version = get_version()
 
     if not current_version:
         wx.CallAfter(wx.MessageBox, "Не удалось определить текущую версию.", "Ошибка", wx.ICON_ERROR)
@@ -131,7 +102,7 @@ def download_and_update(download_url, parent_frame):
         )
 
         # Загружаем архив
-        logging.info(f"Скачиваем обновление из {download_url}")
+        logger.info(f"Скачиваем обновление из {download_url}")
         response = requests.get(download_url, stream=True, timeout=60)
         response.raise_for_status()
 
@@ -147,11 +118,11 @@ def download_and_update(download_url, parent_frame):
                     keep_going = progress_dialog.Update(percent, f"Загружено {percent}%")
                     if not keep_going:
                         progress_dialog.Destroy()
-                        logging.info("Загрузка отменена пользователем.")
+                        logger.info("Загрузка отменена пользователем.")
                         return
 
         progress_dialog.Destroy()
-        logging.info(f"Архив загружен: {zip_path}")
+        logger.info(f"Архив загружен: {zip_path}")
 
         # Распаковываем архив
         if not extract_zip(zip_path, temp_dir):
@@ -167,7 +138,7 @@ def download_and_update(download_url, parent_frame):
         parent_frame.Close()
 
     except Exception as e:
-        logging.error(f"Ошибка обновления: {e}")
+        logger.error(f"Ошибка обновления: {e}")
         wx.CallAfter(wx.MessageBox, f"Ошибка обновления:\n{e}", "Ошибка", wx.ICON_ERROR)
 
 def extract_zip(zip_path, extract_to):
@@ -175,10 +146,10 @@ def extract_zip(zip_path, extract_to):
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(extract_to)
-        logging.info(f"Архив распакован в {extract_to}")
+        logger.info(f"Архив распакован в {extract_to}")
         return True
     except Exception as e:
-        logging.error(f"Ошибка распаковки: {e}")
+        logger.error(f"Ошибка распаковки: {e}")
         return False
 
 def create_update_bat(zip_filename):
@@ -196,4 +167,4 @@ del "%~f0"
     bat_path = os.path.join(get_app_path(), "update_later.bat")
     with open(bat_path, "w", encoding="utf-8") as f:
         f.write(bat_code)
-    logging.info(f"Создан bat-файл: {bat_path}")
+    logger.info(f"Создан bat-файл: {bat_path}")

@@ -3,6 +3,7 @@ import logging
 import nvda_notify
 from datetime import datetime, timedelta
 from qrz_lookup import QRZLookup
+from constants import QSO_FIELD_NAMES
 
 class QSOManager:
     def __init__(self, parent=None, settings_manager=None):
@@ -34,52 +35,52 @@ class QSOManager:
         self.settings_manager.load_settings()
         self._init_qrz_lookup()
 
-    def add_qso(self, event):
-        call_ctrl = self.controls.get('call')
-        name_ctrl = self.controls.get('name')
-        required_fields = {
-            'Позывной': (call_ctrl, call_ctrl.GetValue().strip().upper() if call_ctrl else ""),
-            'Имя': (name_ctrl, name_ctrl.GetValue().strip().title() if name_ctrl else "")
-        }
-        
-        missing = []
-        first_missing_ctrl = None
-        for field_name, (ctrl, value) in required_fields.items():
-            if not value:
-                missing.append(field_name)
-                if not first_missing_ctrl:
-                    first_missing_ctrl = ctrl
-        
-        if missing:
-            msg = "Заполните обязательные поля:\n- " + "\n- ".join(missing)
-            print(msg)  # Отладочное сообщение
-            self._show_error(msg)
-            if first_missing_ctrl:
-                first_missing_ctrl.SetFocus()
-            return
-        
-        # Получение и обработка значения частоты
-        freq_value = self.controls['freq'].GetValue().strip().replace(",", ".")  # Заменяем запятую на точку
-
-        # Получение даты и времени из полей
+    def get_current_qso_from_form(self):
+        """Собирает данные QSO из полей формы. Одно место связи с виджетами."""
         date_value = self.controls['date'].GetValue()
         time_value = self.controls['time'].GetValue()
-        datetime_str = f"{date_value.FormatISODate()} {time_value.Format('%H:%M')}"  # Убираем секунды
-
-        qso_data = {
-            'call': required_fields['Позывной'][1],
-            'name': required_fields['Имя'][1],
+        datetime_str = f"{date_value.FormatISODate()} {time_value.Format('%H:%M')}"
+        freq_value = self.controls['freq'].GetValue().strip().replace(",", ".")
+        return {
+            'call': self.controls['call'].GetValue().strip().upper(),
+            'name': self.controls['name'].GetValue().strip().title(),
             'city': self.controls['city'].GetValue().strip().title(),
             'qth': self.controls['qth'].GetValue().strip().upper(),
             'band': self.controls['band'].GetStringSelection(),
             'mode': self.controls['mode'].GetStringSelection(),
-            'freq': freq_value,  # Используем обработанное значение частоты
+            'freq': freq_value,
             'rst_received': self.controls['rst_received'].GetValue().strip(),
             'rst_sent': self.controls['rst_sent'].GetValue().strip(),
             'comment': self.controls['comment'].GetValue().strip().capitalize(),
-            'datetime': datetime_str
+            'datetime': datetime_str,
         }
-        
+
+    def set_form_from_qso(self, qso):
+        """Заполняет поля формы из словаря QSO. Одно место связи с виджетами."""
+        self.controls['call'].SetValue(qso.get('call', ''))
+        self.controls['name'].SetValue(qso.get('name', ''))
+        self.controls['city'].SetValue(qso.get('city', ''))
+        self.controls['qth'].SetValue(qso.get('qth', ''))
+        self.controls['band'].SetStringSelection(qso.get('band', ''))
+        self.controls['mode'].SetStringSelection(qso.get('mode', ''))
+        self.controls['freq'].SetValue(qso.get('freq', ''))
+        self.controls['rst_received'].SetValue(qso.get('rst_received', ''))
+        self.controls['rst_sent'].SetValue(qso.get('rst_sent', ''))
+        self.controls['comment'].SetValue(qso.get('comment', ''))
+
+    def add_qso(self, event):
+        qso_data = self.get_current_qso_from_form()
+        call_val = qso_data['call']
+        name_val = qso_data['name']
+        if not call_val:
+            self._show_error("Заполните обязательные поля:\n- Позывной")
+            self.controls['call'].SetFocus()
+            return
+        if not name_val:
+            self._show_error("Заполните обязательные поля:\n- Имя")
+            self.controls['name'].SetFocus()
+            return
+
         if self.editing_index is not None:
             self.qso_list[self.editing_index] = qso_data  # Перезапись существующей записи
             self.editing_index = None
@@ -96,24 +97,10 @@ class QSOManager:
         if selected_index == -1:
             self._show_error("Выберите запись для редактирования")
             return
-        
-        # Переключаемся на вкладку "Добавить QSO" для удобства пользователя
         self.parent.notebook.SetSelection(0)
-        
-        qso_data = self.qso_list[selected_index]
-        self.controls['call'].SetValue(qso_data['call'])
-        self.controls['name'].SetValue(qso_data['name'])
-        self.controls['city'].SetValue(qso_data['city'])
-        self.controls['qth'].SetValue(qso_data['qth'])
-        self.controls['band'].SetStringSelection(qso_data['band'])
-        self.controls['mode'].SetStringSelection(qso_data['mode'])
-        self.controls['freq'].SetValue(qso_data['freq'])
-        self.controls['rst_received'].SetValue(qso_data['rst_received'])
-        self.controls['rst_sent'].SetValue(qso_data['rst_sent'])
-        self.controls['comment'].SetValue(qso_data['comment'])
-        
-        self.editing_index = selected_index  # Сохранение индекса редактируемой записи
-        self.controls['call'].SetFocus()  # Установка фокуса на поле "Позывной"
+        self.set_form_from_qso(self.qso_list[selected_index])
+        self.editing_index = selected_index
+        self.controls['call'].SetFocus()
 
     def del_qso(self, event):
         selected_index = self.journal_list.GetFirstSelected()
@@ -129,17 +116,9 @@ class QSOManager:
     def _update_journal(self):
         self.journal_list.DeleteAllItems()
         for idx, qso in enumerate(self.qso_list):
-            self.journal_list.InsertItem(idx, qso['call'])      # Позывной
-            self.journal_list.SetItem(idx, 1, qso['name'])      # Имя
-            self.journal_list.SetItem(idx, 2, qso['city'])      # Город
-            self.journal_list.SetItem(idx, 3, qso['qth'])       # QTH
-            self.journal_list.SetItem(idx, 4, qso['band'])      # Диапазон
-            self.journal_list.SetItem(idx, 5, qso['mode'])      # Режим
-            self.journal_list.SetItem(idx, 6, qso['rst_received'])     # RST-принято
-            self.journal_list.SetItem(idx, 7, qso['rst_sent'])     # RST-передано
-            self.journal_list.SetItem(idx, 8, qso['freq'])     # Частота
-            self.journal_list.SetItem(idx, 9, qso['comment'])  # Комментарий
-            self.journal_list.SetItem(idx, 10, qso['datetime'])  # Дата/Время
+            self.journal_list.InsertItem(idx, qso.get(QSO_FIELD_NAMES[0], ""))
+            for col_idx in range(1, len(QSO_FIELD_NAMES)):
+                self.journal_list.SetItem(idx, col_idx, qso.get(QSO_FIELD_NAMES[col_idx], ""))
 
     def _clear_fields(self):
         """

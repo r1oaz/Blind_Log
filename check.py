@@ -1,8 +1,14 @@
+"""
+УСТАРЕВШИЙ МОДУЛЬ — не используется в проекте.
+Проверка и установка обновлений выполняется через updater.py.
+Оставлен для справки. Можно удалить.
+"""
 import os
 import sys
 import requests
 import subprocess
 import wx
+
 
 def resource_path(relative_path):
     try:

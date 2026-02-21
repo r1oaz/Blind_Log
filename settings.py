@@ -27,6 +27,10 @@ class SettingsManager:
         self.load_settings()
         self.apply_logging()
 
+    def get_option(self, key):
+        """Возвращает значение настройки; при отсутствии — из default_settings (один источник дефолтов)."""
+        return self.settings.get(key, self.default_settings.get(key, ''))
+
     def load_settings(self):
         if not os.path.exists(self.config_file):
             self.create_default_settings()
@@ -64,7 +68,7 @@ class SettingsManager:
     def apply_logging(self):
         # Используем force=True (для Python 3.8+), чтобы перенастроить logging.
         # Это позволяет централизованно управлять логированием из этого класса.
-        if self.settings.get('log_enabled', '0') == '1':
+        if self.get_option('log_enabled') == '1':
             logging.basicConfig(filename='blind_log.log', level=logging.INFO,
                                 format='%(asctime)s - %(levelname)s - %(message)s',
                                 force=True, encoding='utf-8')

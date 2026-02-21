@@ -1,29 +1,21 @@
 import subprocess
-import re
 import wx
 import wx.adv
 import webbrowser
 import os
-import sys
 from datetime import datetime
 from updater import check_update
 
 from qso_manager import QSOManager
 from exporter import Exporter
 from settings import SettingsManager
+from utils import resource_path, get_version_info
+from constants import MODES, BANDS, DEFAULT_MODE_INDEX, DEFAULT_BAND_INDEX, JOURNAL_COLUMNS
 
 # Создаем кастомные ID для пунктов меню
 ID_UPDATE = wx.NewIdRef()
 ID_CHANGELOG = wx.NewIdRef()
 
-
-def resource_path(relative_path):
-    """Возвращает абсолютный путь к ресурсу, учитывая запуск из PyInstaller onefile."""
-    try:
-        base_path = sys._MEIPASS
-    except AttributeError:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
 
 class Blind_log(wx.Frame):
     def __init__(self, *args, settings_manager=None, **kwds):
@@ -109,8 +101,8 @@ class Blind_log(wx.Frame):
         # Выбор режима
         mode_sizer = wx.BoxSizer(wx.HORIZONTAL)
         mode_label = wx.StaticText(panel, label="Режим:")
-        self.controls['mode'] = wx.Choice(panel, choices=["AM", "FM", "SSB", "CW"])
-        self.controls['mode'].SetSelection(2) # SSB по умолчанию
+        self.controls['mode'] = wx.Choice(panel, choices=MODES)
+        self.controls['mode'].SetSelection(DEFAULT_MODE_INDEX)
         mode_sizer.Add(mode_label, 0, wx.ALIGN_CENTER_VERTICAL|wx.RIGHT, 5)
         mode_sizer.Add(self.controls['mode'], 1, wx.EXPAND)
         main_sizer.Add(mode_sizer, 0, wx.EXPAND|wx.ALL, 5)
@@ -118,10 +110,8 @@ class Blind_log(wx.Frame):
         # Выбор диапазона
         band_sizer = wx.BoxSizer(wx.HORIZONTAL)
         band_label = wx.StaticText(panel, label="Диапазон:")
-        self.controls['band'] = wx.Choice(panel, choices=[
-            "160m", "80m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "2m", "70cm"
-        ])
-        self.controls['band'].SetSelection(2) # 40m по умолчанию
+        self.controls['band'] = wx.Choice(panel, choices=BANDS)
+        self.controls['band'].SetSelection(DEFAULT_BAND_INDEX)
         band_sizer.Add(band_label, 0, wx.ALIGN_CENTER_VERTICAL|wx.RIGHT, 5)
         band_sizer.Add(self.controls['band'], 1, wx.EXPAND)
         main_sizer.Add(band_sizer, 0, wx.EXPAND|wx.ALL, 5)
@@ -191,20 +181,7 @@ class Blind_log(wx.Frame):
         self.export_btn.Bind(wx.EVT_BUTTON, self.exporter.on_export)
 
     def _init_journal_columns(self):
-        columns = [
-            ("Позывной", 120),
-            ("Имя", 100),
-            ("Город", 120),
-            ("QTH", 120),
-            ("Диапазон", 80),
-            ("Режим", 80),
-            ("RST-принято", 80),
-            ("RST-передано", 80),
-            ("Частота", 80),
-            ("Комментарий", 250),
-            ("Дата/Время", 150)
-        ]
-        for idx, (title, width) in enumerate(columns):
+        for idx, (title, width) in enumerate(JOURNAL_COLUMNS):
             self.journal_list.InsertColumn(idx, title, width=width)
 
     def _init_accelerator(self):
@@ -292,44 +269,11 @@ class Blind_log(wx.Frame):
         else:
             self.Destroy()
 
-    def _get_version_info(self):
-        """
-        Читает информацию о программе из файла version.txt.
-        """
-        version_file = resource_path("version.txt")  # Используем resource_path для правильного пути
-        version_info = {
-            "description": "Программный радиолюбительский журнал",
-            "author": "Неизвестный автор",
-            "version": "Неизвестная версия"
-        }
-
-        if os.path.exists(version_file):
-            try:
-                with open(version_file, "r", encoding="utf-8") as file:
-                    content = file.read()
-                    # Извлекаем ProductName
-                    product_name_match = re.search(r"StringStruct\('ProductName', '(.+?)'\)", content)
-                    if product_name_match:
-                        version_info["description"] = product_name_match.group(1)
-                    # Извлекаем FileVersion
-                    file_version_match = re.search(r"StringStruct\('FileVersion', '(.+?)'\)", content)
-                    if file_version_match:
-                        version_info["version"] = file_version_match.group(1)
-                    # Извлекаем CompanyName (если нужно для автора)
-                    author_match = re.search(r"StringStruct\('CompanyName', '(.+?)'\)", content)
-                    if author_match:
-                        version_info["author"] = author_match.group(1)
-            except Exception as e:
-                wx.MessageBox(f"Ошибка чтения файла version.txt: {e}", "Ошибка", wx.OK | wx.ICON_ERROR)
-
-        return version_info
-
     def on_about(self, event):
         """
         Обработчик для пункта меню "О программе".
         """
-        # Чтение данных из файла version.txt
-        version_info = self._get_version_info()
+        version_info = get_version_info()
 
         # Создание диалога "О программе"
         about_dialog = wx.Dialog(self, title="О программе", size=(400, 300))
