@@ -15,6 +15,10 @@ from constants import MODES, BANDS, DEFAULT_MODE_INDEX, DEFAULT_BAND_INDEX, JOUR
 # Создаем кастомные ID для пунктов меню
 ID_UPDATE = wx.NewIdRef()
 ID_CHANGELOG = wx.NewIdRef()
+ID_ADD_QSO = wx.NewIdRef()
+ID_EDIT_QSO = wx.NewIdRef()
+ID_DEL_QSO = wx.NewIdRef()
+ID_EXPORT_QSO = wx.NewIdRef()
 
 
 class Blind_log(wx.Frame):
@@ -30,6 +34,9 @@ class Blind_log(wx.Frame):
         
         self._init_ui()
         self._init_journal_columns()
+        # Применяем видимость полей при старте (rebuild add panel and columns)
+        self.apply_visible_fields()
+        # Устанавливаем ускорители после финальной сборки контролов (add_btn может быть пересоздан)
         self._init_accelerator()
         self.Layout()
         self.Centre()
@@ -54,13 +61,13 @@ class Blind_log(wx.Frame):
         self.notebook = wx.Notebook(self, style=wx.NB_LEFT)
         self.notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_page_changed)
 
-        add_panel = wx.Panel(self.notebook)
-        self._init_add_qso_ui(add_panel)
-        self.notebook.AddPage(add_panel, "Добавить QSO")
+        self.add_panel = wx.Panel(self.notebook)
+        self._init_add_qso_ui(self.add_panel)
+        self.notebook.AddPage(self.add_panel, "Добавить QSO")
 
-        journal_panel = wx.Panel(self.notebook)
-        self._init_journal_ui(journal_panel)
-        self.notebook.AddPage(journal_panel, "Журнал")
+        self.journal_panel = wx.Panel(self.notebook)
+        self._init_journal_ui(self.journal_panel)
+        self.notebook.AddPage(self.journal_panel, "Журнал")
 
         # Привязываем обработчики к правильным идентификаторам
         self.Bind(wx.EVT_MENU, self.on_exit, id=wx.ID_EXIT)
@@ -69,11 +76,19 @@ class Blind_log(wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_help, id=wx.ID_HELP)
         self.Bind(wx.EVT_MENU, self.on_check_updates, id=ID_UPDATE)
         self.Bind(wx.EVT_MENU, self.on_show_changelog, id=ID_CHANGELOG)
+        # Привязка обработчиков для ускорителей QSO (работают независимо от ID кнопок)
+        self.Bind(wx.EVT_MENU, lambda e: self.qso_manager.add_qso(e), id=ID_ADD_QSO)
+        self.Bind(wx.EVT_MENU, lambda e: self.qso_manager.edit_qso(e), id=ID_EDIT_QSO)
+        self.Bind(wx.EVT_MENU, lambda e: self.qso_manager.del_qso(e), id=ID_DEL_QSO)
+        self.Bind(wx.EVT_MENU, lambda e: self.exporter.on_export(e), id=ID_EXPORT_QSO)
 
     def _init_add_qso_ui(self, panel):
+        # Построение формы добавления QSO: создаём только видимые контролы
+        self.controls = getattr(self, 'controls', {})
         main_sizer = wx.BoxSizer(wx.VERTICAL)
-        
-        # Определения полей для формы
+
+        visible = self.settings_manager.get_visible_fields()
+
         field_definitions = [
             ('call', "Позывной:", wx.TextCtrl, {'style': wx.TE_PROCESS_ENTER}),
             ('name', "Имя:", wx.TextCtrl, {}),
@@ -84,79 +99,87 @@ class Blind_log(wx.Frame):
             ('rst_sent', "RST-передано:", wx.TextCtrl, {}),
         ]
 
-        # Создание и размещение текстовых полей
         for key, label_text, ctrl_class, styles in field_definitions:
+            if not visible.get(key, True):
+                # remove any existing control reference
+                if key in self.controls:
+                    del self.controls[key]
+                continue
             row_sizer = wx.BoxSizer(wx.HORIZONTAL)
             label = wx.StaticText(panel, label=label_text)
             ctrl = ctrl_class(panel, **styles)
             self.controls[key] = ctrl
-            
             row_sizer.Add(label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
             row_sizer.Add(ctrl, 1, wx.EXPAND)
             main_sizer.Add(row_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         # Привязка Enter для позывного
-        self.controls['call'].Bind(wx.EVT_TEXT_ENTER, self.qso_manager.on_callsign_enter)
+        if 'call' in self.controls:
+            self.controls['call'].Bind(wx.EVT_TEXT_ENTER, self.qso_manager.on_callsign_enter)
 
-        # Выбор режима
-        mode_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        mode_label = wx.StaticText(panel, label="Режим:")
-        self.controls['mode'] = wx.Choice(panel, choices=MODES)
-        self.controls['mode'].SetSelection(DEFAULT_MODE_INDEX)
-        mode_sizer.Add(mode_label, 0, wx.ALIGN_CENTER_VERTICAL|wx.RIGHT, 5)
-        mode_sizer.Add(self.controls['mode'], 1, wx.EXPAND)
-        main_sizer.Add(mode_sizer, 0, wx.EXPAND|wx.ALL, 5)
+        # Режим
+        if visible.get('mode', True):
+            mode_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            mode_label = wx.StaticText(panel, label="Режим:")
+            self.controls['mode'] = wx.Choice(panel, choices=MODES)
+            self.controls['mode'].SetSelection(DEFAULT_MODE_INDEX)
+            mode_sizer.Add(mode_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+            mode_sizer.Add(self.controls['mode'], 1, wx.EXPAND)
+            main_sizer.Add(mode_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
-        # Выбор диапазона
-        band_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        band_label = wx.StaticText(panel, label="Диапазон:")
-        self.controls['band'] = wx.Choice(panel, choices=BANDS)
-        self.controls['band'].SetSelection(DEFAULT_BAND_INDEX)
-        band_sizer.Add(band_label, 0, wx.ALIGN_CENTER_VERTICAL|wx.RIGHT, 5)
-        band_sizer.Add(self.controls['band'], 1, wx.EXPAND)
-        main_sizer.Add(band_sizer, 0, wx.EXPAND|wx.ALL, 5)
+        # Диапазон
+        if visible.get('band', True):
+            band_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            band_label = wx.StaticText(panel, label="Диапазон:")
+            self.controls['band'] = wx.Choice(panel, choices=BANDS)
+            self.controls['band'].SetSelection(DEFAULT_BAND_INDEX)
+            band_sizer.Add(band_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+            band_sizer.Add(self.controls['band'], 1, wx.EXPAND)
+            main_sizer.Add(band_sizer, 0, wx.EXPAND | wx.ALL, 5)
 
         # Комментарий
-        comment_label = wx.StaticText(panel, label="Комментарий:")
-        self.controls['comment'] = wx.TextCtrl(panel, style=wx.TE_MULTILINE)
-        main_sizer.Add(comment_label, 0, wx.TOP|wx.LEFT, 5)
-        main_sizer.Add(self.controls['comment'], 1, wx.EXPAND|wx.ALL, 5)
+        if visible.get('comment', True):
+            comment_label = wx.StaticText(panel, label="Комментарий:")
+            self.controls['comment'] = wx.TextCtrl(panel, style=wx.TE_MULTILINE)
+            main_sizer.Add(comment_label, 0, wx.TOP | wx.LEFT, 5)
+            main_sizer.Add(self.controls['comment'], 1, wx.EXPAND | wx.ALL, 5)
 
-        # Поля для даты и времени
-        date_time_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        date_label = wx.StaticText(panel, label="Дата:")
-        self.controls['date'] = wx.adv.DatePickerCtrl(panel, style=wx.adv.DP_DROPDOWN | wx.adv.DP_SHOWCENTURY)
-        time_label = wx.StaticText(panel, label="Время:")
-        self.controls['time'] = wx.adv.TimePickerCtrl(panel)
-        date_time_sizer.Add(date_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
-        date_time_sizer.Add(self.controls['date'], 1, wx.EXPAND | wx.RIGHT, 10)
-        date_time_sizer.Add(time_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
-        date_time_sizer.Add(self.controls['time'], 1, wx.EXPAND)
-        main_sizer.Add(date_time_sizer, 0, wx.EXPAND | wx.ALL, 5)
-
-        # Установка начальных значений для даты и времени
-        current_time = self.qso_manager._get_current_time_with_timezone()
-        self.controls['date'].SetValue(wx.DateTime.FromDMY(current_time.day, current_time.month - 1, current_time.year))
-        self.controls['time'].SetValue(wx.DateTime.FromHMS(current_time.hour, current_time.minute, 0))  # Убираем секунды
+        # Дата и время
+        if visible.get('date', True) or visible.get('time', True):
+            date_time_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            date_label = wx.StaticText(panel, label="Дата:")
+            self.controls['date'] = wx.adv.DatePickerCtrl(panel, style=wx.adv.DP_DROPDOWN | wx.adv.DP_SHOWCENTURY)
+            time_label = wx.StaticText(panel, label="Время:")
+            self.controls['time'] = wx.adv.TimePickerCtrl(panel)
+            date_time_sizer.Add(date_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+            date_time_sizer.Add(self.controls['date'], 1, wx.EXPAND | wx.RIGHT, 10)
+            date_time_sizer.Add(time_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+            date_time_sizer.Add(self.controls['time'], 1, wx.EXPAND)
+            main_sizer.Add(date_time_sizer, 0, wx.EXPAND | wx.ALL, 5)
+            current_time = self.qso_manager._get_current_time_with_timezone()
+            try:
+                self.controls['date'].SetValue(wx.DateTime.FromDMY(current_time.day, current_time.month - 1, current_time.year))
+                self.controls['time'].SetValue(wx.DateTime.FromHMS(current_time.hour, current_time.minute, 0))
+            except Exception:
+                pass
 
         # Кнопка добавления
         self.add_btn = wx.Button(panel, label="Добавить QSO")
-        main_sizer.Add(self.add_btn, 0, wx.ALIGN_RIGHT|wx.ALL, 10)
-        
+        main_sizer.Add(self.add_btn, 0, wx.ALIGN_RIGHT | wx.ALL, 10)
+
         panel.SetSizer(main_sizer)
         self.add_btn.Bind(wx.EVT_BUTTON, self.qso_manager.add_qso)
-        self.controls['call'].SetFocus()
+        if 'call' in self.controls:
+            self.controls['call'].SetFocus()
 
-        # Передаем словарь с элементами управления в менеджер QSO
+        # Передаем элементы управления менеджеру QSO
         self.qso_manager.set_controls(self.controls)
-
-        # Установка значений по умолчанию для RST-принято и RST-передано
         self.qso_manager._initialize_rst_fields()
 
     def _init_journal_ui(self, panel):
         sizer = wx.BoxSizer(wx.VERTICAL)
         self.journal_list = wx.ListCtrl(
-            panel, 
+            panel,
             style=wx.LC_REPORT|wx.LC_HRULES|wx.LC_VRULES,
             size=(-1, 600)
         )
@@ -181,15 +204,56 @@ class Blind_log(wx.Frame):
         self.export_btn.Bind(wx.EVT_BUTTON, self.exporter.on_export)
 
     def _init_journal_columns(self):
-        for idx, (title, width) in enumerate(JOURNAL_COLUMNS):
-            self.journal_list.InsertColumn(idx, title, width=width)
+        # Перестроить колонки согласно видимости полей
+        try:
+            while self.journal_list.GetColumnCount() > 0:
+                self.journal_list.DeleteColumn(0)
+        except Exception:
+            pass
+        visible = self.settings_manager.get_visible_fields()
+        journal_columns = []
+        idx = 0
+        # Используем QSO_FIELD_NAMES и JOURNAL_COLUMNS для порядка и заголовков
+        from constants import QSO_FIELD_NAMES
+        for (field_name, (title, width)) in zip(QSO_FIELD_NAMES, JOURNAL_COLUMNS):
+            if field_name == 'datetime':
+                continue
+            if visible.get(field_name, True):
+                self.journal_list.InsertColumn(idx, title, width=width)
+                journal_columns.append(field_name)
+                idx += 1
+        # Добавляем комбинированную дата/время если хотя бы одно видно
+        if visible.get('date', True) or visible.get('time', True):
+            dt_title, dt_width = JOURNAL_COLUMNS[-1]
+            self.journal_list.InsertColumn(idx, dt_title, width=dt_width)
+            journal_columns.append('datetime')
+        # Сохраняем порядок колонок в QSOManager
+        self.qso_manager.journal_columns = journal_columns
+
+    def apply_visible_fields(self):
+        # Перестроить add_panel и колонки журнала
+        try:
+            self.add_panel.DestroyChildren()
+        except Exception:
+            pass
+        self._init_add_qso_ui(self.add_panel)
+        try:
+            self.journal_list.DeleteAllItems()
+        except Exception:
+            pass
+        self._init_journal_columns()
+        try:
+            self.qso_manager._update_journal()
+        except Exception:
+            pass
 
     def _init_accelerator(self):
+        # Используем кастомные IDs для ускорителей, чтобы они работали даже после перестроения UI
         accel_entries = [
-            (wx.ACCEL_CTRL, wx.WXK_RETURN, self.add_btn.GetId()),
-            (wx.ACCEL_CTRL, ord('E'), self.edit_btn.GetId()),
-            (wx.ACCEL_CTRL, ord('S'), self.export_btn.GetId()),
-            (wx.ACCEL_NORMAL, wx.WXK_DELETE, self.del_btn.GetId()),
+            (wx.ACCEL_CTRL, wx.WXK_RETURN, ID_ADD_QSO),
+            (wx.ACCEL_CTRL, ord('E'), ID_EDIT_QSO),
+            (wx.ACCEL_CTRL, ord('S'), ID_EXPORT_QSO),
+            (wx.ACCEL_NORMAL, wx.WXK_DELETE, ID_DEL_QSO),
             (wx.ACCEL_SHIFT, wx.WXK_F1, wx.ID_ABOUT),
             (wx.ACCEL_NORMAL, wx.WXK_F1, wx.ID_HELP),
             (wx.ACCEL_CTRL, wx.WXK_F1, ID_CHANGELOG),
@@ -226,8 +290,15 @@ class Blind_log(wx.Frame):
         event.Skip()
 
     def on_settings(self, event):
-        self.settings_manager.show_settings()
-        self.qso_manager.reload_settings()  # Применить новые настройки сразу
+        # Открыть диалог настроек; после закрытия применяем настройки и перестраиваем UI
+        self.settings_manager.show_settings(parent=self)
+        # Обновить настройки в менеджере QSO (перечитать значения, инициализировать QRZ при необходимости)
+        self.qso_manager.reload_settings()
+        # Применить видимость полей немедленно (перестроит форму и колонки)
+        try:
+            self.apply_visible_fields()
+        except Exception:
+            pass
 
     def on_exit(self, event):
         """

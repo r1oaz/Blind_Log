@@ -1,4 +1,4 @@
-﻿# ================================
+powershell -NoProfile -Command "& { try { [System.Management.Automation.Language.Parser]::ParseFile('d:\projects\git_rep\Blind_Log\push_to_git.ps1',[ref]$null,[ref]$null) | Out-Null; Write-Output 'PARSE_OK' } catch { Write-Output 'PARSE_ERROR:'; Write-Output $_.Exception.Message; exit 1 } }"# ================================
 # PUSH + CHANGELOG + VERSION SCRIPT
 # ================================
 # Логика: сначала все вопросы, потом вся работа (add, commit с version/changelog, push)
@@ -16,7 +16,7 @@ Write-Host "==============================="
 Write-Host "🔍 Проверяем состояние репозитория"
 Write-Host "==============================="
 
-try { & git fetch origin main > $null 2>&1 } catch { }
+git fetch origin main 2>$null | Out-Null
 $localCommits = git log origin/main..HEAD --oneline 2>$null
 
 if ($localCommits) {

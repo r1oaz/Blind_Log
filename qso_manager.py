@@ -3,7 +3,6 @@ import logging
 import nvda_notify
 from datetime import datetime, timedelta
 from qrz_lookup import QRZLookup
-from constants import QSO_FIELD_NAMES
 
 class QSOManager:
     def __init__(self, parent=None, settings_manager=None):
@@ -22,7 +21,7 @@ class QSOManager:
     def _init_qrz_lookup(self):
         qrz_username = self.settings_manager.settings.get("qrz_username", "")
         qrz_password = self.settings_manager.settings.get("qrz_password", "")
-        use_qrz = self.settings_manager.settings.get("use_qrz_lookup", '0') == '1'
+        use_qrz = self.settings_manager.settings.get("use_qrz_lookup", '1') == '1'
         self.qrz_lookup = QRZLookup(qrz_username, qrz_password) if use_qrz else None
         if use_qrz and self.qrz_lookup and not self.qrz_lookup.login():
             wx.MessageBox(
@@ -35,61 +34,92 @@ class QSOManager:
         self.settings_manager.load_settings()
         self._init_qrz_lookup()
 
-    def get_current_qso_from_form(self):
-        """Собирает данные QSO из полей формы. Одно место связи с виджетами."""
-        date_value = self.controls['date'].GetValue()
-        time_value = self.controls['time'].GetValue()
-        datetime_str = f"{date_value.FormatISODate()} {time_value.Format('%H:%M')}"
-        freq_value = self.controls['freq'].GetValue().strip().replace(",", ".")
-        return {
-            'call': self.controls['call'].GetValue().strip().upper(),
-            'name': self.controls['name'].GetValue().strip().title(),
-            'city': self.controls['city'].GetValue().strip().title(),
-            'qth': self.controls['qth'].GetValue().strip().upper(),
-            'band': self.controls['band'].GetStringSelection(),
-            'mode': self.controls['mode'].GetStringSelection(),
+    def add_qso(self, event):
+        """Добавление QSO: читаем только видимые поля; требуем только CALL."""
+        visible = self.settings_manager.get_visible_fields()
+
+        call_ctrl = self.controls.get('call')
+        call_val = call_ctrl.GetValue().strip().upper() if call_ctrl else ""
+
+        if not call_val:
+            self._show_error("Заполните обязательное поле: Позывной")
+            if call_ctrl:
+                call_ctrl.SetFocus()
+            return
+
+        # Frequency
+        freq_ctrl = self.controls.get('freq')
+        freq_value = (freq_ctrl.GetValue().strip().replace(",", ".") if freq_ctrl and visible.get('freq', True) else "")
+
+        # Date/time: compute using current timezone if controls hidden/missing
+        now = self._get_current_time_with_timezone()
+        date_ctrl = self.controls.get('date')
+        time_ctrl = self.controls.get('time')
+        if visible.get('date', True) or visible.get('time', True):
+            # use provided parts where visible, fallback to now for missing parts
+            if date_ctrl and visible.get('date', True):
+                d = date_ctrl.GetValue()
+                date_part = d.FormatISODate()
+            else:
+                date_part = now.strftime('%Y-%m-%d')
+            if time_ctrl and visible.get('time', True):
+                t = time_ctrl.GetValue()
+                time_part = t.Format('%H:%M')
+            else:
+                time_part = now.strftime('%H:%M')
+            datetime_str = f"{date_part} {time_part}"
+        else:
+            datetime_str = now.strftime('%Y-%m-%d %H:%M')
+
+        # Build qso record, reading only controls that exist and are visible
+        def read_str(key, default=""):
+            if not visible.get(key, True):
+                return default
+            ctrl = self.controls.get(key)
+            if not ctrl:
+                return default
+            # Handle different control types: TextCtrl, Choice, etc.
+            try:
+                if hasattr(ctrl, 'GetValue'):
+                    val = ctrl.GetValue()
+                elif hasattr(ctrl, 'GetStringSelection'):
+                    val = ctrl.GetStringSelection()
+                elif hasattr(ctrl, 'GetSelection') and hasattr(ctrl, 'GetString'):
+                    sel = ctrl.GetSelection()
+                    val = ctrl.GetString(sel) if sel != wx.NOT_FOUND else ''
+                else:
+                    val = ''
+            except Exception:
+                try:
+                    val = ctrl.GetStringSelection()
+                except Exception:
+                    val = ''
+            return (val or '').strip()
+
+        qso_data = {
+            'call': call_val,
+            'name': read_str('name', '').title(),
+            'city': read_str('city', '').title(),
+            'qth': read_str('qth', '').upper(),
+            'band': read_str('band', ''),
+            'mode': read_str('mode', ''),
             'freq': freq_value,
-            'rst_received': self.controls['rst_received'].GetValue().strip(),
-            'rst_sent': self.controls['rst_sent'].GetValue().strip(),
-            'comment': self.controls['comment'].GetValue().strip().capitalize(),
+            'rst_received': read_str('rst_received', ''),
+            'rst_sent': read_str('rst_sent', ''),
+            'comment': read_str('comment', ''),
             'datetime': datetime_str,
         }
 
-    def set_form_from_qso(self, qso):
-        """Заполняет поля формы из словаря QSO. Одно место связи с виджетами."""
-        self.controls['call'].SetValue(qso.get('call', ''))
-        self.controls['name'].SetValue(qso.get('name', ''))
-        self.controls['city'].SetValue(qso.get('city', ''))
-        self.controls['qth'].SetValue(qso.get('qth', ''))
-        self.controls['band'].SetStringSelection(qso.get('band', ''))
-        self.controls['mode'].SetStringSelection(qso.get('mode', ''))
-        self.controls['freq'].SetValue(qso.get('freq', ''))
-        self.controls['rst_received'].SetValue(qso.get('rst_received', ''))
-        self.controls['rst_sent'].SetValue(qso.get('rst_sent', ''))
-        self.controls['comment'].SetValue(qso.get('comment', ''))
-
-    def add_qso(self, event):
-        qso_data = self.get_current_qso_from_form()
-        call_val = qso_data['call']
-        name_val = qso_data['name']
-        if not call_val:
-            self._show_error("Заполните обязательные поля:\n- Позывной")
-            self.controls['call'].SetFocus()
-            return
-        if not name_val:
-            self._show_error("Заполните обязательные поля:\n- Имя")
-            self.controls['name'].SetFocus()
-            return
-
         if self.editing_index is not None:
-            self.qso_list[self.editing_index] = qso_data  # Перезапись существующей записи
+            self.qso_list[self.editing_index] = qso_data
             self.editing_index = None
         else:
             self.qso_list.append(qso_data)
-        
+
         self._update_journal()
         self._clear_fields()
-        self.controls['call'].SetFocus()
+        if call_ctrl:
+            call_ctrl.SetFocus()
         self._show_notification("QSO добавлен в журнал")
 
     def edit_qso(self, event):
@@ -97,10 +127,41 @@ class QSOManager:
         if selected_index == -1:
             self._show_error("Выберите запись для редактирования")
             return
+        
+        # Переключаемся на вкладку "Добавить QSO" для удобства пользователя
         self.parent.notebook.SetSelection(0)
-        self.set_form_from_qso(self.qso_list[selected_index])
-        self.editing_index = selected_index
-        self.controls['call'].SetFocus()
+        
+        qso_data = self.qso_list[selected_index]
+        # Устанавливаем значения только в тех контролах, которые присутствуют
+        if 'call' in self.controls:
+            self.controls['call'].SetValue(qso_data.get('call', ''))
+        if 'name' in self.controls:
+            self.controls['name'].SetValue(qso_data.get('name', ''))
+        if 'city' in self.controls:
+            self.controls['city'].SetValue(qso_data.get('city', ''))
+        if 'qth' in self.controls:
+            self.controls['qth'].SetValue(qso_data.get('qth', ''))
+        if 'band' in self.controls and hasattr(self.controls['band'], 'SetStringSelection'):
+            try:
+                self.controls['band'].SetStringSelection(qso_data.get('band', ''))
+            except Exception:
+                pass
+        if 'mode' in self.controls and hasattr(self.controls['mode'], 'SetStringSelection'):
+            try:
+                self.controls['mode'].SetStringSelection(qso_data.get('mode', ''))
+            except Exception:
+                pass
+        if 'freq' in self.controls:
+            self.controls['freq'].SetValue(qso_data.get('freq', ''))
+        if 'rst_received' in self.controls:
+            self.controls['rst_received'].SetValue(qso_data.get('rst_received', ''))
+        if 'rst_sent' in self.controls:
+            self.controls['rst_sent'].SetValue(qso_data.get('rst_sent', ''))
+        if 'comment' in self.controls:
+            self.controls['comment'].SetValue(qso_data.get('comment', ''))
+        
+        self.editing_index = selected_index  # Сохранение индекса редактируемой записи
+        self.controls['call'].SetFocus()  # Установка фокуса на поле "Позывной"
 
     def del_qso(self, event):
         selected_index = self.journal_list.GetFirstSelected()
@@ -114,11 +175,15 @@ class QSOManager:
         self._show_notification("QSO удален из журнала")
 
     def _update_journal(self):
+        # Обновление журнала согласно self.journal_columns (список полей в нужном порядке)
         self.journal_list.DeleteAllItems()
         for idx, qso in enumerate(self.qso_list):
-            self.journal_list.InsertItem(idx, qso.get(QSO_FIELD_NAMES[0], ""))
-            for col_idx in range(1, len(QSO_FIELD_NAMES)):
-                self.journal_list.SetItem(idx, col_idx, qso.get(QSO_FIELD_NAMES[col_idx], ""))
+            # Вставляем пустую строку и заполняем колонки по списку
+            self.journal_list.InsertItem(idx, "")
+            for col, field in enumerate(getattr(self, 'journal_columns', [])):
+                val = qso.get(field, '')
+                # Форматирование: datetime остаётся как есть
+                self.journal_list.SetItem(idx, col, val)
 
     def _clear_fields(self):
         """
@@ -131,10 +196,18 @@ class QSOManager:
             if key in self.controls:
                 self.controls[key].SetValue("")
 
-        # Устанавливаем дату и время с учетом часового пояса
+        # Устанавливаем дату и время с учетом часового пояса, если контролы присутствуют
         current_time = self._get_current_time_with_timezone()
-        self.controls['date'].SetValue(wx.DateTime.FromDMY(current_time.day, current_time.month - 1, current_time.year))
-        self.controls['time'].SetValue(wx.DateTime.FromHMS(current_time.hour, current_time.minute, 0))  # Убираем секунды
+        if 'date' in self.controls:
+            try:
+                self.controls['date'].SetValue(wx.DateTime.FromDMY(current_time.day, current_time.month - 1, current_time.year))
+            except Exception:
+                pass
+        if 'time' in self.controls:
+            try:
+                self.controls['time'].SetValue(wx.DateTime.FromHMS(current_time.hour, current_time.minute, 0))
+            except Exception:
+                pass
 
     def _show_error(self, message):
         dlg = wx.MessageDialog(self.parent, message, "Ошибка ввода", wx.OK|wx.ICON_ERROR)
@@ -189,8 +262,10 @@ class QSOManager:
             result = self.qrz_lookup.lookup_call(callsign)
             if result:
                 # Вставляем значения из QRZ.ru только если они не пустые
-                self.controls['name'].SetValue(result.get("name", ""))
-                self.controls['city'].SetValue(result.get("city", ""))
+                if 'name' in self.controls:
+                    self.controls['name'].SetValue(result.get("name", ""))
+                if 'city' in self.controls:
+                    self.controls['city'].SetValue(result.get("city", ""))
                 nvda_notify.nvda_notify(f"Данные для {callsign} успешно загружены")
                 print(f"QRZ: Данные для {callsign} успешно загружены: {result}")
                 logging.info(f"QRZ: Данные для {callsign} успешно загружены: {result}")
