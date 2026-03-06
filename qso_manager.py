@@ -3,6 +3,7 @@ import logging
 import nvda_notify
 from datetime import datetime, timedelta
 from qrz_lookup import QRZLookup
+from transliterator import transliterate_russian
 
 class QSOManager:
     def __init__(self, parent=None, settings_manager=None):
@@ -109,6 +110,12 @@ class QSOManager:
             'comment': read_str('comment', ''),
             'datetime': datetime_str,
         }
+
+        # Транслитерация полей, кроме позывного
+        qso_data['name'] = transliterate_russian(qso_data['name'])
+        qso_data['city'] = transliterate_russian(qso_data['city'])
+        qso_data['qth'] = transliterate_russian(qso_data['qth'])
+        qso_data['comment'] = transliterate_russian(qso_data['comment'])
 
         if self.editing_index is not None:
             self.qso_list[self.editing_index] = qso_data

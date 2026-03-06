@@ -201,8 +201,23 @@ class SettingsDialog(wx.Dialog):
         interface_panel = wx.Panel(self.notebook)
         iface_sizer = wx.BoxSizer(wx.VERTICAL)
         self.visible_checkboxes = {}
+        # Словарь для перевода названий полей на русский
+        field_labels = {
+            'call': 'Позывной',
+            'name': 'Имя',
+            'city': 'Город',
+            'qth': 'QTH',
+            'freq': 'Частота',
+            'band': 'Диапазон',
+            'mode': 'Режим',
+            'rst_received': 'RST-принято',
+            'rst_sent': 'RST-передано',
+            'comment': 'Комментарий',
+            'date': 'Дата',
+            'time': 'Время',
+        }
         for fname in getattr(self.settings_manager, 'visible_field_names', []):
-            label = fname.capitalize()
+            label = field_labels.get(fname, fname.capitalize())
             cb = wx.CheckBox(interface_panel, label=label)
             iface_sizer.Add(cb, 0, wx.ALL, 2)
             self.visible_checkboxes[fname] = cb
