@@ -9,27 +9,34 @@ chcp 65001 | Out-Null
 [Console]::InputEncoding  = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"
 
+# Функция для паузы перед выходом
+function Pause-Exit {
+    param([int]$ExitCode = 0)
+    Read-Host "Нажмите Enter для выхода"
+    exit $ExitCode
+}
+
 # Функция для безопасного чтения многострочного текста
 function Read-MultiLineInput {
     param([string]$Prompt)
     Write-Host $Prompt
-    Write-Host "(Введите текст. До 5 строк. Пустая строка завершает ввод.)"
+    Write-Host "(Введите текст построчно. Каждая строка - Enter.)"
+    Write-Host "(Для завершения введите '/end' или пустую строку после текста)"
     Write-Host "(Если не хотите вводить, просто нажмите Enter сразу)"
     $lines = @()
-    $maxLines = 5
-    $currentLine = 0
     
-    while ($currentLine -lt $maxLines) {
+    while ($true) {
         $line = Read-Host
+        if ($line -eq "/end") {
+            break
+        }
         if ([string]::IsNullOrEmpty($line)) {
             if ($lines.Count -gt 0) {
                 break
             }
-            # Если ещё ничего не введено, предложить снова
             continue
         }
         $lines += $line
-        $currentLine++
     }
     
     return ($lines -join "`n")
@@ -60,30 +67,58 @@ if ($localCommits -and $localCommits.Count -gt 0 -and -not [string]::IsNullOrWhi
 }
 
 if ([string]::IsNullOrWhiteSpace($msg)) {
-    $msg = Read-Host "Введите сообщение для коммита"
+    $msg = Read-MultiLineInput "Введите сообщение для коммита"
 }
 
 $msg = $msg.Trim()
 if ([string]::IsNullOrWhiteSpace($msg)) {
     Write-Host "❌ Сообщение коммита не может быть пустым"
-    exit 1
+    Pause-Exit 1
 }
 
 $changelogText = Read-MultiLineInput "Что нового (для релиза)"
 $changelogText = $changelogText.Trim()
+# заменяем LF на CRLF для Windows-совместимости
+$changelogText = $changelogText -replace "`n", "`r`n"
 
-$tagConfirm = Read-Host "Создать тег и релиз? (y/n)"
+# Получаем текущую версию из version.txt
+$currentVersion = ""
+try {
+    $versionContent = Get-Content version.txt -Raw -Encoding UTF8
+    if ($versionContent -match "FileVersion',\s*'([^']+)'") {
+        $currentVersion = $matches[1]
+    }
+} catch {
+    $currentVersion = "неизвестна"
+}
+
+$tagConfirm = Read-Host "Создать тег и релиз? (y/n) [n]"
 
 $doRelease = $false
 $version   = ""
 
+# Если пусто, считаем 'n'
+if ([string]::IsNullOrWhiteSpace($tagConfirm)) {
+    $tagConfirm = 'n'
+}
+
 if ($tagConfirm.Trim().Length -gt 0 -and $tagConfirm.Trim()[0].ToString().ToLower() -eq "y") {
     $doRelease = $true
-    $version   = Read-Host "Введите версию (например, 2.8.1.0)"
-    $version   = $version.Trim()
+    $versionPrompt = if ($currentVersion -ne "неизвестна") { "Введите версию текущая: $currentVersion" } else { "Введите версию" }
+    $versionInput = Read-Host $versionPrompt
+    if ([string]::IsNullOrWhiteSpace($versionInput)) {
+        if ($currentVersion -ne "неизвестна") {
+            $version = $currentVersion
+        } else {
+            Write-Host "❌ Версия не может быть пустой"
+            Pause-Exit 1
+        }
+    } else {
+        $version = $versionInput.Trim()
+    }
     if ([string]::IsNullOrWhiteSpace($version)) {
         Write-Host "❌ Версия не может быть пустой"
-        exit 1
+        Pause-Exit 1
     }
     
     if ([string]::IsNullOrWhiteSpace($changelogText)) {
@@ -91,7 +126,7 @@ if ($tagConfirm.Trim().Length -gt 0 -and $tagConfirm.Trim()[0].ToString().ToLowe
         $confirmEmpty = Read-Host "Продолжить? (y/n)"
         if ($confirmEmpty.Trim().Length -eq 0 -or $confirmEmpty.Trim()[0].ToString().ToLower() -ne "y") {
             Write-Host "❌ Отмена операции"
-            exit 1
+            Pause-Exit 1
         }
     }
 }
@@ -111,7 +146,7 @@ if ($doRelease) {
         $parts = $version -split '\.'
         if ($parts.Count -lt 3) {
             Write-Host "❌ Версия должна быть в формате X.Y.Z или X.Y.Z.W"
-            exit 1
+            Pause-Exit 1
         }
         $build = if ($parts.Count -ge 4) { $parts[3] } else { "0" }
         $tuple = "$($parts[0]), $($parts[1]), $($parts[2]), $build"
@@ -122,34 +157,44 @@ if ($doRelease) {
         $content = $content -replace "(FileVersion',\s*'[^']+')", "FileVersion', '$version'"
         $content = $content -replace "(ProductVersion',\s*'[^']+')", "ProductVersion', '$version'"
 
-        Set-Content version.txt $content -Encoding UTF8NoBOM -NoNewline
+        # используем .NET для записи UTF8 без BOM (PowerShell 5.1 не поддерживает UTF8NoBOM)
+        $encoding = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllText((Get-Item version.txt).FullName, $content, $encoding)
         Write-Host "   version.txt обновлён"
     }
     catch {
         Write-Host "❌ Ошибка при обновлении version.txt: $_"
-        exit 1
+        Pause-Exit 1
     }
 
-    # ---------- changelog.txt ----------
-    Write-Host "📝 Обновляем changelog.txt..."
-    $block = "версия $version`n"
-    $block += "изменения:`n"
-    $block += "$changelogText`n"
-    $block += "`n---`n`n"
+    # ---------- changeLog.txt ----------
+    Write-Host "📝 Обновляем changeLog.txt..."
+    # используем CRLF (\r\n) для Windows-совместимости
+    $block = "версия $version`r`n"
+    $block += "изменения:`r`n"
+    $block += "$changelogText`r`n"
+    $block += "`r`n---`r`n`r`n"
     
     try {
-        if (Test-Path changelog.txt) {
-            $old = Get-Content changelog.txt -Raw -Encoding UTF8
-            Set-Content changelog.txt ($block + $old) -Encoding UTF8NoBOM -NoNewline
+        # используем .NET для записи UTF8 без BOM (PowerShell 5.1 не поддерживает UTF8NoBOM)
+        $encoding = New-Object System.Text.UTF8Encoding $false
+        $changelogPath = (Get-Item changeLog.txt -ErrorAction SilentlyContinue).FullName
+        if (-not $changelogPath) {
+            $changelogPath = Join-Path (Get-Location) "changeLog.txt"
+        }
+        
+        if (Test-Path changeLog.txt) {
+            $old = Get-Content changeLog.txt -Raw -Encoding UTF8
+            [System.IO.File]::WriteAllText($changelogPath, ($block + $old), $encoding)
         }
         else {
-            Set-Content changelog.txt $block -Encoding UTF8NoBOM -NoNewline
+            [System.IO.File]::WriteAllText($changelogPath, $block, $encoding)
         }
-        Write-Host "   changelog.txt обновлён"
+        Write-Host "   changeLog.txt обновлён"
     }
     catch {
-        Write-Host "❌ Ошибка при обновлении changelog.txt: $_"
-        exit 1
+        Write-Host "❌ Ошибка при обновлении changeLog.txt: $_"
+        Pause-Exit 1
     }
 }
 
@@ -166,12 +211,12 @@ try {
     }
     else {
         Write-Host "   ❌ Ошибка при создании коммита (код: $LASTEXITCODE)"
-        exit 1
+        Pause-Exit 1
     }
 }
 catch {
     Write-Host "   ❌ Критическая ошибка при коммите: $_"
-    exit 1
+    Pause-Exit 1
 }
 
 # ---------- push ----------
@@ -203,19 +248,19 @@ while (-not $pushSuccess -and $retryCount -lt $maxRetries) {
                     else {
                         Write-Host "   ❌ Rebase не удался (код: $LASTEXITCODE)"
                         Write-Host "   Проверьте конфликты вручную и повторите операцию"
-                        exit 1
+                        Pause-Exit 1
                     }
                 }
                 catch {
                     Write-Host "   ❌ Ошибка при rebase: $_"
-                    exit 1
+                    Pause-Exit 1
                 }
             }
         }
     }
     catch {
         Write-Host "❌ Критическая ошибка при push: $_"
-        exit 1
+        Pause-Exit 1
     }
 }
 
@@ -224,9 +269,9 @@ if ($pushSuccess) {
     Write-Host "==============================="
     Write-Host "✅ Все операции завершены успешно!"
     Write-Host "==============================="
-    exit 0
+    Pause-Exit 0
 }
 else {
     Write-Host "❌ Не удалось запушить после нескольких попыток"
-    exit 1
+    Pause-Exit 1
 }

@@ -93,6 +93,11 @@ class Exporter:
                     file.write(''.join(parts))
 
             wx.MessageBox("Экспорт в ADIF завершен успешно!", "Экспорт", wx.OK | wx.ICON_INFORMATION)
+            try:
+                if hasattr(self.qso_manager, 'auto_temp') and self.qso_manager.auto_temp:
+                    self.qso_manager.clear_temp()
+            except Exception:
+                pass
             return True
         except Exception as e:
             wx.MessageBox(f"Ошибка экспорта ADIF: {e}", "Ошибка", wx.OK | wx.ICON_ERROR)

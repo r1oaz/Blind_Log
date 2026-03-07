@@ -1,6 +1,9 @@
 import wx
 import logging
 import nvda_notify
+import os
+import json
+import utils
 from datetime import datetime, timedelta
 from qrz_lookup import QRZLookup
 from transliterator import transliterate_russian
@@ -15,9 +18,19 @@ class QSOManager:
         self.controls = {}
         self.qso_list = []
         self.editing_index = None  # Индекс редактируемой записи
+        # автосохранение сеанса
+        self.auto_temp = self.settings_manager.get_option('auto_temp', '0') == '1'
+        # temp-файл рядом с приложением
+        base = os.path.join(utils.get_app_path(), '')
+        self.temp_file = os.path.join(base, 'blind_log_temp.json')
+
+    def _refresh_temp_setting(self):
+        self.auto_temp = self.settings_manager.get_option('auto_temp', '0') == '1'
 
     def set_controls(self, controls):
         self.controls = controls
+        # после привязки контролов возможно потребуется подчитать автосохранение
+        self._refresh_temp_setting()
 
     def _init_qrz_lookup(self):
         qrz_username = self.settings_manager.settings.get("qrz_username", "")
@@ -34,6 +47,7 @@ class QSOManager:
     def reload_settings(self):
         self.settings_manager.load_settings()
         self._init_qrz_lookup()
+        self._refresh_temp_setting()
 
     def add_qso(self, event):
         """Добавление QSO: читаем только видимые поля; требуем только CALL."""
@@ -114,7 +128,6 @@ class QSOManager:
         # Транслитерация полей, кроме позывного
         qso_data['name'] = transliterate_russian(qso_data['name'])
         qso_data['city'] = transliterate_russian(qso_data['city'])
-        qso_data['qth'] = transliterate_russian(qso_data['qth'])
         qso_data['comment'] = transliterate_russian(qso_data['comment'])
 
         if self.editing_index is not None:
@@ -122,6 +135,8 @@ class QSOManager:
             self.editing_index = None
         else:
             self.qso_list.append(qso_data)
+        if self.auto_temp:
+            self.save_temp()
 
         self._update_journal()
         self._clear_fields()
@@ -170,6 +185,32 @@ class QSOManager:
         self.editing_index = selected_index  # Сохранение индекса редактируемой записи
         self.controls['call'].SetFocus()  # Установка фокуса на поле "Позывной"
 
+    # --- автотемп методы ---
+    def save_temp(self):
+        try:
+            with open(self.temp_file, 'w', encoding='utf-8') as f:
+                json.dump(self.qso_list, f, ensure_ascii=False)
+        except Exception as e:
+            logging.error(f"Ошибка сохранения temp: {e}")
+
+    def load_temp(self):
+        if not os.path.exists(self.temp_file):
+            return None
+        try:
+            with open(self.temp_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data
+        except Exception as e:
+            logging.error(f"Ошибка загрузки temp: {e}")
+            return None
+
+    def clear_temp(self):
+        if os.path.exists(self.temp_file):
+            try:
+                os.remove(self.temp_file)
+            except Exception as e:
+                logging.error(f"Ошибка удаления temp: {e}")
+
     def del_qso(self, event):
         selected_index = self.journal_list.GetFirstSelected()
         if selected_index == -1:
@@ -177,6 +218,8 @@ class QSOManager:
             return
         
         self.qso_list.pop(selected_index)
+        if self.auto_temp:
+            self.save_temp()
         self._update_journal()
         self.journal_list.SetFocus()  # Установка фокуса на список записей
         self._show_notification("QSO удален из журнала")

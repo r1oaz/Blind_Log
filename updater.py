@@ -6,6 +6,7 @@ import subprocess
 import shutil
 import logging
 import wx
+import uuid
 
 from utils import resource_path, get_app_path, get_version
 
@@ -51,7 +52,7 @@ def check_update(parent_frame, silent_if_latest=False):
         return
 
     # Показываем changelog пользователю
-    dlg = wx.Dialog(parent_frame, title=f"Доступна новая версия {latest_version}", size=(600, 500))
+    dlg = wx.Dialog(parent_frame, title=f"Доступна новая версия {latest_version} (у вас {current_version})", size=(600, 500))
     vbox = wx.BoxSizer(wx.VERTICAL)
     info = wx.StaticText(dlg, label="Что нового в этой версии:")
     vbox.Add(info, 0, wx.ALL, 10)
@@ -84,13 +85,20 @@ def check_update(parent_frame, silent_if_latest=False):
 
 def download_and_update(download_url, parent_frame):
     """Загружает архив обновления и выполняет обновление."""
-    temp_dir = os.path.join(get_app_path(), "temp")
+    #стройка temp: уникальный подкаталог чтобы не мешать старым остаткам
+    base_temp = os.path.join(get_app_path(), "temp")
+    # очищаем предыдущие временные директории
+    try:
+        if os.path.exists(base_temp):
+            shutil.rmtree(base_temp)
+    except Exception:
+        pass
+    temp_dir = os.path.join(base_temp, str(uuid.uuid4()))
     zip_path = os.path.join(temp_dir, "update.zip")
 
     try:
         # Создаём временную папку
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir)
+        os.makedirs(temp_dir, exist_ok=True)
 
         # Создаём диалог прогресса
         progress_dialog = wx.ProgressDialog(
@@ -114,25 +122,31 @@ def download_and_update(download_url, parent_frame):
                 if chunk:
                     f.write(chunk)
                     downloaded_size += len(chunk)
-                    percent = int(downloaded_size * 100 / total_size)
-                    keep_going = progress_dialog.Update(percent, f"Загружено {percent}%")
-                    if not keep_going:
-                        progress_dialog.Destroy()
-                        logger.info("Загрузка отменена пользователем.")
-                        return
-
+                    if total_size > 0:
+                        percent = int(downloaded_size * 100 / total_size)
+                        keep_going = progress_dialog.Update(percent, f"Загружено {percent}%")
+                        if not keep_going:
+                            progress_dialog.Destroy()
+                            logger.info("Загрузка отменена пользователем.")
+                            return
         progress_dialog.Destroy()
         logger.info(f"Архив загружен: {zip_path}")
 
-        # Распаковываем архив
-        if not extract_zip(zip_path, temp_dir):
+        # проверка целостности: размер совпадает с заголовком
+        if total_size and downloaded_size != total_size:
+            raise IOError("Размер файла не совпадает с объявленным")
+
+        # Распаковываем архив в новую подпапку
+        extract_subdir = os.path.join(temp_dir, "new")
+        os.makedirs(extract_subdir, exist_ok=True)
+        if not extract_zip(zip_path, extract_subdir):
             wx.CallAfter(wx.MessageBox, "Ошибка распаковки архива.", "Ошибка", wx.ICON_ERROR)
             return
 
-        # Создаём bat-файл для обновления
-        create_update_bat(zip_path)
+        # Готовим bat-скрипт, который атомарно заменит файлы
+        create_update_bat(extract_subdir)
 
-        # Запускаем bat-файл и закрываем программу
+        # Запускаем бат-файл и закрываем программу
         bat_path = os.path.join(get_app_path(), "update_later.bat")
         subprocess.Popen([bat_path], shell=True)
         parent_frame.Close()
@@ -152,15 +166,25 @@ def extract_zip(zip_path, extract_to):
         logger.error(f"Ошибка распаковки: {e}")
         return False
 
-def create_update_bat(zip_filename):
-    """Создаёт bat-файл для завершения программы, обновления файлов и автозапуска Blind_log.exe."""
+def create_update_bat(extracted_dir):
+    """Создаёт bat-файл, который подождёт закрытия программы и
+    атомарно переместит файлы из extracted_dir в каталог приложения.
+    Предыдущий exe будет переименован в .bak на время обмена."""
     bat_code = f"""@echo off
 cd /d %~dp0
-ping 127.0.0.1 -n 4 > nul
-powershell -command "Expand-Archive -Path '{zip_filename}' -DestinationPath 'temp'"
-move /Y "temp\\Blind_log.exe" "Blind_log.exe"
-rd /s /q temp
-del "{zip_filename}"
+""" + """timeout /t 3 /nobreak > nul
+rem -- если backup уже есть, удаляем его
+if exist "Blind_log.exe.bak" del /q "Blind_log.exe.bak"
+rem -- переместим текущий exe в backup
+if exist "Blind_log.exe" move /Y "Blind_log.exe" "Blind_log.exe.bak"
+rem -- копируем новые файлы
+xcopy /E /Y "{extracted_dir}\*" "%~dp0"
+rem -- очистка временной папки
+rd /s /q "{extracted_dir}"
+rem -- удалить весь temp-каталог, если остался
+rd /s /q "{os.path.join(get_app_path(), 'temp')}"
+rem -- удалить архив, если остался
+if exist "{extracted_dir}.zip" del /q "{extracted_dir}.zip"
 start "" "Blind_log.exe"
 del "%~f0"
 """

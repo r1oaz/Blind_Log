@@ -23,6 +23,25 @@ class MyApp(wx.App):
             if self.settings_manager.get_option('check_updates_on_start') == '1':
                 check_update(None, silent_if_latest=True)  # Не показывать сообщение при автозапуске
             self.frame = Blind_log(None, settings_manager=self.settings_manager)  # Передаем settings_manager
+            # автосохранение: предлагаем восстановить данные, если настройка включена
+            if self.settings_manager.get_option('auto_temp', '0') == '1':
+                temp_data = self.frame.qso_manager.load_temp()
+                if temp_data and len(temp_data) > 0:
+                    dlg = wx.MessageDialog(
+                        self.frame,
+                        f"Найдены несохранённые данные ({len(temp_data)} QSO). Восстановить?",
+                        "Восстановление сессии",
+                        wx.YES_NO | wx.ICON_QUESTION
+                    )
+                    if dlg.ShowModal() == wx.ID_YES:
+                        self.frame.qso_manager.qso_list = temp_data
+                        self.frame.qso_manager._update_journal()
+                        # после восстановления больше не предлагать
+                        try:
+                            self.frame.qso_manager.clear_temp()
+                        except Exception:
+                            pass
+                    dlg.Destroy()
             self.frame.Show()
             return True
         except Exception as e:

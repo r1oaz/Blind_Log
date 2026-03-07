@@ -21,6 +21,7 @@ class SettingsManager:
             'qrz_password': '',
             'use_qrz_lookup': '0',  # По умолчанию все флажки сняты
             'check_updates_on_start': '0',
+            'auto_temp': '0',  # автосохранение сессии
             'log_enabled': '0',
         }
         # Visible fields defaults (1 = visible, 0 = hidden). CALL always visible.
@@ -178,6 +179,8 @@ class SettingsDialog(wx.Dialog):
         gen_sizer.Add(self.log_enabled_checkbox, 0, wx.ALL, 5)
         self.check_updates_checkbox = wx.CheckBox(general_panel, label="Проверять обновления при запуске программы")
         gen_sizer.Add(self.check_updates_checkbox, 0, wx.ALL, 5)
+        self.auto_temp_checkbox = wx.CheckBox(general_panel, label="Автосохранение сеанса (temp)")
+        gen_sizer.Add(self.auto_temp_checkbox, 0, wx.ALL, 5)
         fields = [
             (self.call_label, self.call_text),
             (self.operator_name_label, self.operator_name_text),
@@ -282,6 +285,7 @@ class SettingsDialog(wx.Dialog):
         self.use_qrz_checkbox.SetValue(self.settings.get('use_qrz_lookup', '0') == '1')
         self.log_enabled_checkbox.SetValue(self.settings.get('log_enabled', '0') == '1')
         self.check_updates_checkbox.SetValue(self.settings.get('check_updates_on_start', '0') == '1')
+        self.auto_temp_checkbox.SetValue(self.settings.get('auto_temp', '0') == '1')
         self.on_use_qrz_toggle(None)
 
         # Устанавливаем состояния чекбоксов видимости полей
@@ -310,6 +314,7 @@ class SettingsDialog(wx.Dialog):
             'use_qrz_lookup': '1' if self.use_qrz_checkbox.GetValue() else '0',
             'log_enabled': '1' if self.log_enabled_checkbox.GetValue() else '0',
             'check_updates_on_start': '1' if self.check_updates_checkbox.GetValue() else '0',
+            'auto_temp': '1' if self.auto_temp_checkbox.GetValue() else '0',
         }
         self.settings_manager.save_settings(settings)
         # Сохраняем видимость полей
