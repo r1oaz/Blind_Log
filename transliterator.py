@@ -5,6 +5,7 @@
 
 try:
     import transliterate
+    import transliterate.contrib.languages.ru
 except ImportError:
     raise ImportError("Библиотека 'transliterate' не установлена. Установите её командой: pip install transliterate")
 

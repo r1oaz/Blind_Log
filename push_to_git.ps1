@@ -235,7 +235,7 @@ while (-not $pushSuccess -and $retryCount -lt $maxRetries) {
             $pushSuccess = $true
         }
         else {
-            Write-Host "⚠️ Push не удался (код: $LASTEXITCODE). Пробуем pull --rebase..."
+            Write-Host "⚠️ Push не удался (код: $LASTEXITCODE). Синхронизируем с origin и повторим..."
             $retryCount++
             
             if ($retryCount -lt $maxRetries) {
@@ -268,6 +268,10 @@ if ($pushSuccess) {
     Write-Host ""
     Write-Host "==============================="
     Write-Host "✅ Все операции завершены успешно!"
+    if ($doRelease) {
+        Write-Host "📦 Релиз $version создан и запушен."
+        Write-Host "   Не забудьте создать GitHub Release для тега v$version с описанием из changeLog.txt"
+    }
     Write-Host "==============================="
     Pause-Exit 0
 }

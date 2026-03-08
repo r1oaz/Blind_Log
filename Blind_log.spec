@@ -7,8 +7,15 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('help.htm', '.'), ('version.txt', '.'), ('nvdaControllerClient64.dll', '.'), ('changeLog.txt', '.')],
-    hiddenimports=[],
+    datas=[('help.htm', '.'), ('version.txt', '.'), ('nvdaControllerClient64.dll', '.'), ('changeLog.txt', '.'), ('C:\\Users\\ivan\\AppData\\Roaming\\Python\\Python310\\site-packages\\transliterate', 'transliterate')],
+    hiddenimports=[
+    'transliterate',
+    'transliterate.base',
+    'transliterate.contrib.languages.ru',
+    'requests',
+    'xml.etree.ElementTree',
+],
+
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
