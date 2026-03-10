@@ -2,8 +2,8 @@ name: Build and Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
 
 permissions:
   contents: write
@@ -16,29 +16,30 @@ jobs:
       - name: 🧾 Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # чтобы получить все теги и коммиты
+          fetch-depth: 0
 
       - name: 🐍 Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: 'pip' # Автоматическое кэширование зависимостей
 
-      - name: 📦 Create venv and install dependencies
+      - name: 📦 Install dependencies
         run: |
-          python -m venv venv
-          venv\Scripts\python.exe -m pip install --upgrade pip
-          venv\Scripts\python.exe -m pip install -r requirements.txt
-          venv\Scripts\python.exe -m pip install pyinstaller
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
         shell: pwsh
 
       - name: 🔍 Extract version from version.txt
         id: get_version
         run: |
           $content = Get-Content version.txt | Where-Object { $_ -match "FileVersion" }
-          if ($content -match "'([0-9]+\.[0-9]+\.[0-9]+)") {
-            echo "version=$($matches[1])" >> $env:GITHUB_OUTPUT
+          if ($content -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+            $version = $matches[1]
+            echo "version=$version" >> $env:GITHUB_OUTPUT
           } else {
-            Write-Error "❌ Не удалось извлечь версию"
+            Write-Error "❌ Не удалось извлечь версию из version.txt"
             exit 1
           }
         shell: pwsh
@@ -46,65 +47,45 @@ jobs:
       - name: 📜 Extract changelog from changeLog.txt
         id: changelog_file
         run: |
-          $lines = Get-Content changeLog.txt -Encoding utf8
-          $desc = ""
-          foreach ($line in $lines) {
-            if ($line -match '^---+$') { break }
-            $desc += "$line`n"
+          if (Test-Path changeLog.txt) {
+            $lines = Get-Content changeLog.txt -Encoding utf8
+            $desc = ""
+            foreach ($line in $lines) {
+              if ($line -match '^---+$') { break }
+              $desc += "$line`n"
+            }
+            $desc = $desc.TrimEnd("`n")
+          } else {
+            $desc = "Release v$($steps.get_version.outputs.version)"
           }
-          $desc = $desc.TrimEnd("`n")
           $eof = [System.Guid]::NewGuid().ToString()
           echo "changelog<<$eof" >> $env:GITHUB_OUTPUT
           echo "$desc" >> $env:GITHUB_OUTPUT
           echo "$eof" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
-      - name: ️ Build Blind_log.exe with PyInstaller
+      - name: 🏗️ Build Blind_log.exe with PyInstaller
         run: |
-          try {
-            venv\Scripts\pyinstaller.exe Blind_log.spec
-            if (!(Test-Path -Path "dist\\Blind_log.exe")) {
-              Write-Error "❌ Файл не найден: dist\\Blind_log.exe"
-              exit 1
-            }
-          } catch {
-            Write-Error "❌ Ошибка сборки Blind_log.exe: $_"
+          python -m PyInstaller Blind_log.spec
+          if (!(Test-Path "dist\Blind_log.exe")) {
+            Write-Error "❌ Файл не найден: dist\Blind_log.exe"
             exit 1
           }
         shell: pwsh
 
       - name: 📦 Archive build artifacts
         run: |
-          try {
-            Compress-Archive -Path dist\Blind_log.exe -DestinationPath dist\Blind_log.zip -Force
-            if (!(Test-Path dist\Blind_log.zip)) {
-              Write-Error "❌ Не удалось создать архив"
-              exit 1
-            }
-          } catch {
-            Write-Error "❌ Ошибка архивации: $_"
-            exit 1
-          }
+          Compress-Archive -Path dist\Blind_log.exe -DestinationPath dist\Blind_log.zip -Force
         shell: pwsh
 
-      - name: 🚀 Create GitHub Release with changelog
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 🚀 Create GitHub Release and Upload Asset
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
-          release_name: Blind Log v${{ steps.get_version.outputs.version }}
+          name: Blind Log v${{ steps.get_version.outputs.version }}
           body: ${{ steps.changelog_file.outputs.changelog }}
+          files: dist/Blind_log.zip
           draft: false
           prerelease: false
-
-      - name: ⬆️ Upload Release Asset
-        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist\Blind_log.zip
-          asset_name: Blind_log.zip
-          asset_content_type: application/zip

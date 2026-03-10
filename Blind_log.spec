@@ -1,21 +1,28 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-
 from PyInstaller.utils.win32.versioninfo import VSVersionInfo, FixedFileInfo, StringFileInfo, StringTable, StringStruct, VarFileInfo, VarStruct
+from PyInstaller.utils.hooks import collect_all
+
+# Собираем всё содержимое пакета transliterate
+transliterate_datas, transliterate_binaries, transliterate_hiddenimports = collect_all('transliterate')
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[],
-    datas=[('help.htm', '.'), ('version.txt', '.'), ('nvdaControllerClient64.dll', '.'), ('changeLog.txt', '.'), ('C:\\Users\\ivan\\AppData\\Roaming\\Python\\Python310\\site-packages\\transliterate', 'transliterate')],
+    binaries=transliterate_binaries,
+    datas=[
+        ('help.htm', '.'),
+        ('version.txt', '.'),
+        ('nvdaControllerClient64.dll', '.'),
+        ('changeLog.txt', '.'),
+    ] + transliterate_datas,
     hiddenimports=[
-    'transliterate',
-    'transliterate.base',
-    'transliterate.contrib.languages.ru',
-    'requests',
-    'xml.etree.ElementTree',
-],
-
+        'transliterate',
+        'transliterate.base',
+        'transliterate.contrib.languages.ru',
+        'requests',
+        'xml.etree.ElementTree',
+    ] + transliterate_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -45,5 +52,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version=eval(open('version.txt', encoding='utf-8').read()),  # теперь будет работать
+    version=eval(open('version.txt', encoding='utf-8').read()),
 )
